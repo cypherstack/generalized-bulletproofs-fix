@@ -1,0 +1,832 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{nicefrac}
+\usepackage{bm}
+\usepackage{hyperref}
+\usepackage{xurl}
+\usepackage[nottoc]{tocbibind}
+\usepackage{enumerate}
+\usepackage{lineno}
+\usepackage{graphicx}
+\usepackage{longtable}
+
+
+\theoremstyle{definition}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem*{definition*}{Definition}
+\newtheorem{corollary}[theorem]{Corollary}
+
+\newcommand{\samp}{\mathrel{\overset{\$}{\leftarrow}}}
+
+\newcommand{\GG}{\mathbb{G}}
+\newcommand{\FF}{\mathbb{F}}
+\newcommand{\mat}[1]{\underline{#1}}
+\newcommand{\zq}{\widetilde{\underline{z}}}
+\newcommand{\yq}{\widetilde{\underline{y}}}
+
+\title{Generalized Bulletproofs for Opening Vector Commitments}
+\author{Brandon Goodell\thanks{\url{mailto:brandon@cypherstack.com}}}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\tableofcontents
+\linenumbers
+
+\section*{Change Log}
+\begin{itemize}
+\item 28 January 2026: Initial presentation.
+\item 28 April 2026: Fix indexing-, dimension-, and type-mismatch errors; add references; tweak narrative.
+\end{itemize}
+
+\section{Introduction}
+
+
+\textit{This report reviews changes made to the Generalized Bulletproofs construction and corresponding security proofs, and is a continuation of the previous work in \cite{aaron} by a different author.}
+
+
+We describe a generalization of Bulletproofs which supports proving the openings of some Pedersen scalar commitments  and Pedersen vector commitments \cite{pedersen1991non} satisfy an arithmetic circuit, and prove our generalization secure. The original Bulletproofs protocol in \cite{bp} supports only Pedersen scalar commitments. In \cite{curvetrees}, a generalization of Bulletproofs supporting vector commitments was first described; see also \cite{repo}. A problem with the extractor was identified and a proposed fix was presented in \cite{aaron}, but that proposal had problems with the security proofs. In fact, the correction was such that a verifier could not even be convinced an arithmetic circuit is satisfied without external verification.
+
+
+The protocol here fixes these errors. Proofs are dependent on all witness data, the extractor works without breaking the discrete logarithm problem, and, for the desired relation, the protocol closes the correctness-soundness gap from the previous proposal. If the parameter $n_c$ governs the number of Pedersen vector commitments and the parameter $m$ governs the number of Pedersen scalar commitments used in the protocol, then our protocol requires communicating $3n_c+8$ elements of $\GG$ (namely $A_I$, $A_O$, $S$, and $\underline{T}$) and $2n+2$  elements of $\FF$ before the inner product argument.
+
+
+
+
+
+
+
+\section{Preliminaries}
+
+
+We present a legend for our notation in Table \ref{tab:legend}; due to the myriad types and dimensions here, we find this table a useful reference.
+
+Let $\GG$ be a prime-order elliptic curve group and $\FF$ the field with $\text{ord}(\GG)$ elements. Let $O \in \GG$ denote the group identity. Let $\GG^*$ be the non-identity elements and let $\FF^*$ be the non-zero elements. We assume the discrete logarithm problem is hard for these: if $G \samp \GG^*$, $x \samp \FF^*$, and $X = xG$, then for all PPT algorithm $\mathcal{A}$, the event in which $x^\prime \leftarrow \mathcal{A}(X,G)$ and $x^\prime = x$ occurs with negligible probability.
+
+
+For any natural numbers $m,n \in \mathbb{N}$, let $FR(\FF^{m \times n})$ be the \textit{full-rank} $m\times n$ matrices with elements of $\FF$. 
+For any natural number $n \in \mathbb{N}$, let $[n]$ be the set of $n$ elements $[n] = \left\{0, 1, \ldots, n-1\right\}$ used for indexing; all indexing begins at $0$. We use underlines to denote vectors. We handle all vectors as matrices, writing inner product notation with matrix transposes; in particular, $\underline{c}_{k,L}^\top \underline{G} + \underline{c}_{k,R}^\top \underline{H} + c^\prime_k H$ denotes the $k^{th}$ Pedersen vector commitment from some list, which is a commitment to some value vector $\underline{c}_{k,L}$ with some individualized blinders in $\underline{c}_{k,R}$ and a common blinder $c^\prime_k$. Readers may be more familiar with the equivalent inner product notation $\langle \underline{c}_{k,L}, \underline{G}\rangle + \langle \underline{c}_{k,R}, \underline{H} \rangle + c^\prime_k H$. 
+
+
+
+In the sequel, we reserve $Q, n, m,  n_c$ to be public non-negative integer scheme parameters such that $Q \geq m$ and $(m,n_c) \neq (0,0)$. Here, $Q$ is a number of linear constraints, $n$ is the number of gates in an arithmetic circuit (zero for trivial/empty circuits), $m$ is a number of Pedersen scalar commitments (zero for proofs without Pedersen scalar commitments), and  $n_c$ is a number of Pedersen vector commitments (zero for proofs without vectors of Pedersen commitments).  
+Let $G, H \in \GG$ be public base points, and let $\underline{G}, \underline{H} \in \GG^n$ be vectors of public base points. We assume these public basepoints have no known discrete logarithm relation.
+
+Let $\mathcal{R}$ be the relation with witnesses and statements as in Table \ref{tab:witstmt} where $(\texttt{w}, \texttt{s}) \in \mathcal{R}$ if and only if all of the following hold.
+\begin{itemize}
+\item $\underline{a}_O = \underline{a}_L \circ \underline{a}_R $
+\item $W_V \underline{v} + \underline{c} = W_L \underline{a}_L + W_R \underline{a}_R + W_O \underline{a}_O + \sum_{k \in [n_c]} W_{k,L} \underline{c}_{k,L}$
+\item $\forall k \in [m], V_k = v_k G + \gamma_k H$
+\item $\forall k \in [n_c], C_k = \underline{c}_{k,L}^\top \underline{G} + \underline{c}_{k,R}^\top \underline{H} + c_k^\prime H$
+\end{itemize}
+
+\begin{table}[h!]
+\centering
+\begin{longtable}{|l|l|}
+\hline
+Symbol & Set \\
+\hline
+\multicolumn{2}{|c|}{Witness $\texttt{w}$} \\
+\hline
+$\underline{a}_L$, $\underline{a}_R$, $\underline{a}_O$ & $\FF^n$ \\
+$\underline{c}_{k,L}$, $\underline{c}_{k,R}$ for each $k \in [n_c]$ & $\FF^n$ \\
+$\underline{v}$, $\underline{\gamma}$ & $\FF^m$ \\
+$\underline{c}^\prime$ & $\FF^{n_c}$ \\
+\hline
+\multicolumn{2}{|c|}{Statement $\texttt{s}$} \\
+\hline
+$\underline{V}$ & $\GG^m$ \\
+$\underline{C}$ & $\GG^{n_c}$ \\
+$\underline{c}$ & $\FF^Q$ \\
+$W_L$, $W_R$, $W_O$ & $\FF^{Q \times n}$ \\
+$W_{k,L}$ for each $k \in [n_c]$ & $\FF^{Q \times n}$ \\
+$W_V$ & $FR(\FF^{Q \times m})$ \\
+\hline
+\end{longtable}
+\caption{Sets containing the components of the witness $\texttt{w}$ and statement $\texttt{s}$.}
+\label{tab:witstmt}
+\end{table}
+
+
+
+
+
+
+If $m \neq 0$ and $n_c = 0$, the protocol described here reduces to Bulletproofs arithmetic circuit satisfiability. If $m = 0$ and $n_c \neq 0$, we drop $W_V$, $\underline{v}$, $\underline{\gamma}$, and $\underline{V}$, and the protocol here deals only with vectors of Pedersen commitments. In this case, the protocol is distinct from Bulletproofs. For most of our treatment we assume that $(m, n_c) \neq (0,0)$.
+
+We use the definition of tree-extractability from \cite{bootle2016efficient}.
+
+\section{Method}
+
+
+
+The protocol can be made non-interactive with a strong Fiat-Shamir approach (\cite{fiat1986prove}, \cite{pointcheval1996security}, \cite{bernhard2012not}) by hashing all transcript data to determine challenges $x$, $y$, and $z$ as usual. 
+The inner product argument presented in Protocol 2 of the Bulletproofs preprint \cite{bp} applies identically to the Generalized Bulletproofs design.
+This reduces the communication complexity logarithmically by replacing the prover's transmission of $\underline{\ell}$ and $\underline{r}$ with an execution of the inner product argument.
+
+
+
+
+
+
+\subsection{Protocol}
+
+The protocol accommodates the Pedersen vector commitments $C_k$ by defining the Bulletproofs-style vectors of polynomials $\underline{\ell}(X)$ and $\underline{r}(X)$ to contain relevant proof data in coefficients which have been carefully constructed to demonstrate the desired relation. 
+
+To clarify, let $n^\prime = 2n_c + 2$. The protocol indices are denoted $i_{LR}$, $j_{LR}$, $i_O$, $j_O$, $i_S$, $j_S$, and, for each $k \in [n_c+1] \setminus \left\{0\right\}$, $i_k=k$, $j_k=n^\prime - k$, and we define the following special indices.
+\begin{center}
+	\begin{tabular}{ll}
+		$i_{LR} = \frac{n^\prime}{2}$, & $j_{LR} = i_{LR}$, \\
+		$i_O = n^\prime$, & $j_O = 0$, \\
+		$i_S = n^\prime + 1$, & $j_S = i_S$
+    \end{tabular}
+\end{center}
+In total, the protocol uses vectors $\underline{\ell}$ and $\underline{r}$ which each consist of $n^\prime+2$ entries. These protocol indices, displayed in Table \ref{table:indices}, are assigned such that $i_O+j_O = i_{LR}+j_{LR} = n^\prime$ and, for each $k \in [n_c+1]\setminus \left\{0\right\}$, $i_k + j_k = n^\prime$.
+\begin{table}[h!]
+\centering
+\resizebox{\textwidth}{!}{
+\begin{tabular}{|c|c|c|c|c|c|c|c|c|c|c|c|}
+\hline
+ Idx & $0$ & $1$ & $\cdots$ & $\frac{n^\prime}{2} - 1$ & $\frac{n^\prime}{2}$ & $\frac{n^\prime}{2} + 1$ & $\cdots$ & $n^\prime - 1$ & $n^\prime$ & $n^\prime + 1$ \\
+\hline
+ Alias & $j_O$ & $i_1$ & $\cdots$ & $i_{n_c}$ & $i_{LR}=j_{LR}$ & $j_{n_c}$ & $\cdots$ & $j_1$ & $i_O$ & $i_S=j_S$   \\
+ \hline
+ \end{tabular}
+ }
+ \caption{The protocol indices; the top row provides literal index values, and the bottom row provides symbols we use in the text for those values.}
+ \label{table:indices}
+\end{table}
+ This way, the Bulletproofs-style polynomial $t(X) = \underline{\ell}(X)^\top\underline{r}(X)$ has all proof data stored in the coefficient on the $n^\prime$-th monomial; the final index is for correctness checks.
+
+
+\begin{definition}
+The Generalized Bulletproofs protocol is a $5$-move interactive proving system which takes place between a stateful prover-verifier pair. The prover inputs a statement-witness pair $(\texttt{s}, \texttt{w})$, the verifier inputs a statement $\texttt{s}$, and the protocol proceeds as follows.
+\begin{enumerate}
+\item \textbf{Prover first round.} The prover does the following.
+\begin{enumerate}[(a)]
+	\item Sample $\alpha, \beta, \rho \samp \FF$, $\underline{s}_L, \underline{s}_R \samp \FF^n$.
+	\item Compute the following.
+	$$A_I = \underline{a}_L^\top \underline{G} + \underline{a}_R^\top \underline{H} + \alpha H$$
+	$$A_O = \underline{a}_O^\top \underline{G} + \beta H.$$
+	$$S = \underline{s}_L^\top \underline{G} + \underline{s}_R^\top \underline{H} + \rho H$$
+	\item Output $(A_I, A_O, S)$.
+\end{enumerate}
+
+\item \textbf{Verifier first round.} The verifier inputs statement $\texttt{s}$ and triple $(A_I, A_O, S)$, and does the following.
+\begin{enumerate}[(a)]
+\item If any element of $\underline{V}$ or $\underline{C}$ in $\texttt{s}$ is identity, reject and terminate.
+\item Otherwise, sample\footnote{It is important that these are sampled from $\FF^* = \FF \setminus \left\{0\right\}$, not all of $\FF$.} challenges $y, z \samp \FF^*$.
+\item \label{sharedstep} Compute the following; the $i^{th}$ entry of $\yq$ is $y^i$ for each $i \in [n]$, and the $i^{th}$ entry of $\zq$ is $z^{i+1}$ for each $i \in [Q]$.
+	$$\yq = \left( 1, y, y^2, \ldots, y^{n-1} \right) \in \FF^n,$$
+    $$\yq^{-1} = \left( 1, y^{-1}, y^{-2}, \ldots, y^{-(n-1)} \right) \in \FF^n,$$
+	$$\zq = \left( z, z^2, \ldots, z^Q \right) \in \FF^Q,\text{ and }$$
+    $$\delta(y, z) = \left(\yq^{-1} \circ \left(W_R^\top \zq\right)\right)\!^\top W_L^\top \zq.$$
+\item Output $(y, z)$.
+\end{enumerate}
+
+\item \textbf{Prover second round.} The prover inputs its previous state and the challenge pair $(y, z)$ and does the following.
+\begin{enumerate}[(a)]
+	\item Compute $\yq$, $\yq^{-1}$, $\zq$, and $\delta(y,z)$ as in Step \ref{sharedstep} above.
+    \item Compute/set the following vectors.
+    \begin{align*}
+    	\underline{\ell}_{i_{LR}} =& \underline{a}_L + \yq^{-1} \circ W_R^\top \zq & \underline{r}_{j_{LR}} =& \yq \circ \underline{a}_R + W_L^\top \zq \\
+		\underline{\ell}_{i_O} =& \underline{a}_O & \underline{r}_{i_O} =& \underline{0} \\
+		\underline{\ell}_{j_O} =& \underline{0} & 
+        \underline{r}_{j_O} =& W^\top_O \zq - \yq \\
+		\underline{\ell}_{i_S} =& \underline{s}_L & \underline{r}_{j_S} =& \yq \circ \underline{s}_R
+    \end{align*}
+    Also compute/set the following vectors  for each $k \in [n_c]$.
+	\begin{align*}
+		\underline{\ell}_{i_{k+1}} =&  \underline{0} & \underline{r}_{i_{k+1}} =& W^\top_{k,L} \zq \\
+		\underline{\ell}_{j_{k+1}} =&  \underline{c}_{k,L}& \underline{r}_{j_{k+1}} =& \yq \circ \underline{c}_{k,R}
+    \end{align*}
+    We display the construction of $\underline{\ell}$ and $\underline{r}$ in Table \ref{tab:lr}.
+    \begin{table}[h!]
+\centering
+\begin{tabular}{|c|c|c|c|}
+\hline
+Index $k$ 
+    & Alias
+    & $\underline{\ell}_k$ 
+    & $\underline{r}_k$ \\
+\hline
+$0$ 
+    & $j_O$
+    & $\underline{0}$ 
+    & $W^\top_O \zq - \yq$ \\
+\hline
+$1$ 
+    & $i_1$
+    & $\underline{0}$ 
+    & $W_{0,L}^\top \zq$ \\
+\hline
+$\cdots$ 
+    & $\cdots$ 
+    & $\cdots$ 
+    & $\cdots$ \\
+\hline
+$\frac{n^\prime}{2}-1$ 
+    & $i_{n_c}$
+    & $\underline{0}$ 
+    & $W_{n_c-1,L}^\top \zq$ \\
+\hline
+$\frac{n^\prime}{2}$
+    & $i_{LR}$
+    & $\underline{a}_L + \yq^{-1} \circ W_R^\top\zq$ 
+    & $\yq \circ \underline{a}_R + W_L^\top\zq$ \\
+\hline
+$\frac{n^\prime}{2}+1$ 
+    & $j_{n_c}$
+    & $\underline{c}_{n_c-1, L}$ 
+    & $\yq \circ \underline{c}_{n_c-1, R}$ \\
+\hline
+$\cdots$ 
+    & $\cdots$ 
+    & $\cdots$ 
+    & $\cdots$ \\
+\hline
+$n^\prime-1$ 
+    & $j_1$
+    & $\underline{c}_{0, L}$ 
+    & $\yq \circ \underline{c}_{0, R}$ \\
+\hline
+$n^\prime$ 
+    & $i_O$
+    & $\underline{a}_O$ 
+    & $\underline{0}$ \\
+\hline
+$n^\prime+1$
+    & $i_S$
+    & $\underline{s}_L$ 
+    & $\yq \circ \underline{s}_R$ \\
+\hline
+\end{tabular}
+\caption{The construction of the $\underline{\ell}$ and $\underline{r}$ polynomials. Note that the first $\frac{n^\prime}{2}$ entries of $\underline{\ell}$ are $\underline{0}$. This way, $t(X)$ has no small coefficients, allowing reduced communication complexity in sending $\underline{T}$ in optimized implementations. We recapitulate the indices from Table \ref{table:indices} for convenience.}
+\label{tab:lr}
+\end{table}
+
+    
+	\item Set the following vectors of polynomials.
+	\begin{align*}
+    \underline{\ell}(X) =& \sum_{i \in [n^\prime + 2]}\underline{\ell}_i X^i  = \sum_{i=\frac{n^\prime}{2}}^{n^\prime + 1}\underline{\ell}_i X^i & \underline{r}(X) =& \sum_{i \in [n^\prime + 2]} \underline{r}_i X^i
+    \end{align*}
+	\item Compute $$t(X) = \underline{\ell}(X)^\top\underline{r}(X) = \sum_{i=\frac{n^\prime}{2}}^{2(n^\prime + 1)} t_i X^i \in \FF[X]$$
+	\item Sample $\tau_i \samp \FF$ for each $i = \frac{n^\prime}{2}, \frac{n^\prime}{2} + 1, \cdots, 2(n^\prime + 1)$ such that $i \neq n^\prime$ and compute the following.
+    $$T_i = t_i G + \tau_i H$$
+	\item Set $\underline{T} = \left\{T_i\right\}_{i=\frac{n^\prime}{2}, i \neq n^\prime}^{2(n^\prime+1)}$ and output $\underline{T}$.
+\end{enumerate}
+
+\item \textbf{Verifier second round.} The verifier inputs its previous state and $\underline{T}$ and does the following.
+\begin{enumerate}[(a)]
+\item Sample\footnote{It is important that this $x$ is sampled from $\FF^* = \FF \setminus \left\{0\right\}$, not all of $\FF$.} $x \samp \FF^*$.
+\item Output $x$.
+\end{enumerate}
+
+\item \textbf{Prover third round.} The prover inputs its previous state and $x$ and  does the following.
+\begin{enumerate}[(a)]
+	\item Evaluate $\underline{\ell} = \underline{\ell}(X=x)$ and $\underline{r} = \underline{r}(X=x)$.
+    \item Compute the following.
+	$$\tau_x = \sum_{i=\frac{n^\prime}{2}, i \neq n^\prime}^{2(n^\prime + 1)} \tau_i x^i + x^{n^\prime} \zq^\top W_V \underline{\gamma}$$
+	$$\mu = \alpha x^{i_{LR}} + \beta x^{i_O} + \rho x^{i_S} + \sum_{k \in [n_c]} c'_k x^{j_{k+1}}$$
+	\item Set\footnote{The variable $\widehat{t}$ need not be communicated, as it is re-computed by the verifier anyway.} $\pi = (\tau_x, \mu, \underline{\ell}, \underline{r})$ and output $\pi$.
+\end{enumerate}
+\item \textbf{Verifier third round.} The verifier then checks the transcript $\mathcal{T} = (\texttt{s}; (A_I, A_O, S); (y, z); \underline{T}; x; \pi)$ for rejection using its previous state as follows.
+\begin{enumerate}
+	\item Set $\underline{H}^\prime = \yq^{-1} \circ \underline{H}$.
+	\item Compute 
+    $$\widehat{t} = \underline{\ell}^\top\underline{r}$$
+	$$\widetilde{W}_L = \zq^\top W_L \underline{H}'$$
+	$$\widetilde{W}_R = \left(\yq^{-1} \circ \left(W_R^\top \zq\right)\right)^\top\underline{G}$$
+	$$\widetilde{W}_O =  \zq^\top W_O  \underline{H}' - \yq^\top \underline{H}^\prime$$
+    and, for each $k \in [n_c]$, compute 
+	$$\widetilde{W}_{k} = \zq^\top W_{k,L} \underline{H}^\prime.$$
+	\item 
+    \label{compute-p} Compute 
+	\begin{multline*}
+		P\!=\!\widetilde{W}_O\!+\!\sum_{k\!\in\![n_c]}\!x^{i_{k+1}}\!\widetilde{W}_k\!+\!x^{i_{LR}}\!(\!A_I\!+\!\widetilde{W}_L\!+\!\widetilde{W}_R\!)\!+\!\sum_{k\!\in\! [n_c]}\!x^{j_{k\!+\!1}}\!C_k\!+\!x^{i_O}\!A_O\!+\!x^{i_S}\!S.
+	\end{multline*}
+    
+	\item If the following equation does not hold, reject.
+	\begin{multline}
+		\label{eqn:verifyT}
+		\widehat{t} G + \tau_x H = 
+		x^{n^\prime}\left(\left( \delta(y, z) + \zq^\top\underline{c}  \right)G +  \zq^\top  W_V \underline{V}\right) + \sum_{i=\frac{n^\prime}{2}, i \neq n^\prime}^{2(n^\prime + 1)} x^i T_i
+	\end{multline}
+	\item If the following equation does not hold, reject.
+	\begin{equation}
+		\label{eqn:verifyP}
+		P = \underline{\ell}^\top \underline{G} + \underline{r}^\top \underline{H}' + \mu H
+	\end{equation}
+	\item Otherwise, accept.
+\end{enumerate}
+\end{enumerate}
+\label{def:theprotocol}
+\end{definition}
+
+
+\subsection{Edge cases}
+
+The edge case $n_c = 0$, $m \neq 0$ reduces to Bulletproofs; see \cite{bp}.  The edge case $m = 0, n_c \neq 0$ is proposed for use in full-chain membership proofs for Monero \cite{fcmp}. 
+The scheme presented here remains correct, knowledge-sound, and SHVZK when $m=0, n_c \neq 0$. In this case, the relation reduces by dropping all terms related to $m$, obtaining statements and witnesses
+\[\texttt{s} = \left(\underline{C}, \underline{c}, W_L, W_R, W_O, \left\{W_{k,L}\right\}_{k \in [n_c]}\right)\] 
+\[\texttt{w} = \left(\underline{a}_L, \underline{a}_R, \underline{a}_O, \left\{ (\underline{c}_{k,L}, \underline{c}_{k,R}) \right\}_{k \in [n_c]}, \underline{c}^\prime\right)\]
+satisfying all of the following.
+\begin{align*}
+\forall k \in [n_c]: \underline{c}_{k,L}^\top \underline{G} + \underline{c}_{k,R}^\top \underline{H} + c'_k H =& C_k\\
+\underline{a}_L \circ \underline{a}_R =& \underline{a}_O\\
+W_L \underline{a}_L + W_R \underline{a}_R + W_O \underline{a}_O + \smash{\sum_{k \in [n_c]} W_{k,L} \underline{c}_{k,L}} =& \underline{c}
+\end{align*}
+Lastly, the edge case $(n_c, m) = (0,0)$ is degenerate, and implies no commitments are used at all; this case ought to be rejected, as no commit-then-prove scheme can save a protocol without commitments.
+
+\section{Security}
+
+
+We now prove that the Generalized Bulletproofs arithmetic circuit satisfiability proving system has the desired security properties.
+
+
+
+\begin{theorem}
+	The interactive protocol in Definition \ref{def:theprotocol}  has perfect completeness, perfect special honest-verifier zero knowledge,  and computational tree extractability.
+\end{theorem}
+
+This theorem is a direct corollary of the following three lemmas.
+
+\begin{lemma}
+The interactive protocol in Definition \ref{def:theprotocol} is perfectly complete.
+\end{lemma}
+\begin{proof}
+Consider a transcript $\mathcal{T}$ generated by an honest prover using a valid statement-witness pair $(\texttt{s}, \texttt{w}) \in \mathcal{R}$. For this transcript, we have the following, where the terms involving $\underline{\ell}_{j_O} = \underline{r}_{i_O} = \underline{\ell}_{i_{k+1}} = \underline{0}$ drop out.
+$$\underline{\ell}^\top \underline{G} +\underline{r}^\top \underline{H}^\prime + \mu H 
+= \left(\underline{\ell}_{i_{LR}} x^{i_{LR}} + \sum_{k \in [n_c]} \underline{\ell}_{j_{k+1}} x^{j_{k+1}} + \underline{\ell}_{i_O} x^{i_O} + \underline{\ell}_{i_S} x^{i_S}\right)^\top \underline{G}$$
+$$+\left(\underline{r}_{j_O} x^{j_O} + \sum_{k \in [n_c]} \left(\underline{r}_{i_{k+1}} x^{i_{k+1}} + \underline{r}_{j_{k+1}} x^{j_{k+1}}\right) + \underline{r}_{i_{LR}} x^{i_{LR}} + \underline{r}_{j_S} x^{j_S}\right)^\top \underline{H}^\prime + \mu H$$
+With an honest prover, the term on $\underline{G}$ can be written as follows
+$$\left(\underline{a}_L + \yq^{-1} \circ W^\top_R \zq\right)x^{i_{LR}} + \sum_{k \in [n_c]} \underline{c}_{k,L} x^{j_{k+1}} + \underline{a}_O x^{i_O} + \underline{s}_L x^{i_S}$$
+and the term on $\underline{H}^\prime$ can be written as follows.
+$$(W^\top_O \zq - \yq)x^{j_O} + \sum_{k \in [n_c]} (W^\top_{k,L} \zq x^{i_{k+1}} + \yq \circ \underline{c}_{k,R} x^{j_{k+1}}) + (\yq \circ \underline{a}_R + W_L^\top \zq)x^{i_{LR}} + \yq \circ \underline{s}_R x^{i_S}$$
+
+Thus, we have the following.
+\begin{align*}
+\underline{\ell}^\top \underline{G} + \underline{r}^\top \underline{H}^\prime + \mu H = & (W^\top_O \zq - \yq)^\top \underline{H}^\prime x^{j_O}  + \sum_{k \in [n_c]} \zq^\top W_{k,L} \underline{H}^\prime x^{i_{k+1}} \\
+& + \left(\left(\underline{a}_L + \yq^{-1} \circ(W_R^\top\zq)\right)^\top \underline{G} + \left(\yq \circ \underline{a}_R + W_L^\top \zq\right)^\top \underline{H}^\prime\right)x^{i_{LR}} \\
+&+ \sum_{k \in [n_c]} \left(\underline{c}_{k,L}^\top \underline{G} + \left(\yq \circ \underline{c}_{k,R}\right)^\top \underline{H}^\prime\right)x^{j_{k+1}} \\
+& + \underline{a}_O^\top \underline{G} x^{i_O} + (\underline{s}_L^\top \underline{G} + (\yq \circ \underline{s}_R)^\top \underline{H}^\prime) x^{i_S} + \mu H
+\end{align*}
+
+Recall our definitions of $\widetilde{W}_O=\left(\zq^\top W_O - \yq^\top\right)\underline{H}^\prime$, and each $\widetilde{W}_{k} = \zq^\top W_{k,L} \underline{H}^\prime$.
+\begin{align*}
+\underline{\ell}^\top \underline{G} + \underline{r}^\top \underline{H}^\prime + \mu H =& \widetilde{W}_O x^{j_O} + \sum_{k \in [n_c]} \widetilde{W}_k x^{i_{k+1}} \\
+& + \left(\left(\underline{a}_L + \yq^{-1} \circ(W_R^\top\zq)\right)^\top \underline{G} + \left(\yq \circ \underline{a}_R + W_L^\top \zq\right)^\top \underline{H}^\prime\right)x^{i_{LR}} \\
+&+ \sum_{k \in [n_c]} \left(\underline{c}_{k,L}^\top \underline{G} + \left(\yq \circ \underline{c}_{k,R}\right)^\top \underline{H}^\prime\right)x^{j_{k+1}} \\
+& + \underline{a}_O^\top \underline{G} x^{i_O} + (\underline{s}_L^\top \underline{G} + (\yq \circ \underline{s}_R)^\top \underline{H}^\prime) x^{i_S} + \mu H \\
+\end{align*}
+
+
+
+
+Since $\underline{H}^\prime = \yq^{-1} \circ \underline{H}$,  $\underline{s}^\top_L \underline{G} + (\yq \circ \underline{s}_R)^\top \underline{H}^\prime = \underline{s}^\top_L \underline{G} + (\yq \circ \underline{s}_R)^\top (\yq^{-1} \circ \underline{H})$. Since Hadamard products compute across inner products, $\underline{s}^\top_L \underline{G} + (\yq \circ \underline{s}_R)^\top (\yq^{-1} \circ \underline{H}) = \underline{s}^\top_L \underline{G} + \underline{s}_R^\top \underline{H}$. Honest provers use $S = \underline{s}_L^\top \underline{G} + \underline{s}_R^\top \underline{H} + \rho H$, so $\underline{s}^\top_L\underline{G} + (\yq \circ \underline{s}_R)^\top \underline{H}^\prime = S -\rho H$. Similarly, for honest provers, we have $\underline{a}^\top_L\underline{G} + (\yq \circ \underline{a}_R)^\top \underline{H}^\prime = A_I - \alpha H$, $\underline{a}^\top_O\underline{G} = A_O - \beta H$, and $\underline{c}_{k,L}^\top \underline{G} + \underline{c}_{k,R}^\top \underline{H} = C_k - c_k^\prime H$. 
+\begin{align*}
+\underline{\ell}^\top \underline{G} + \underline{r}^\top \underline{H}^\prime + \mu H =& \widetilde{W}_O x^{j_O} + \sum_{k \in [n_c]} \widetilde{W}_k x^{i_{k+1}} \\
+& + \left(\left(\underline{a}_L + \yq^{-1} \circ(W_R^\top\zq)\right)^\top \underline{G} + \left(\yq \circ \underline{a}_R + W_L^\top \zq\right)^\top \underline{H}^\prime\right)x^{i_{LR}} \\
+&+ \sum_{k \in [n_c]} \left(C_k - c_k^\prime H\right)x^{j_{k+1}} + (A_O - \beta H) x^{i_O} \\
+&  + (S - \rho H) x^{i_S} + \mu H 
+\end{align*}
+
+Consider the $x^{i_{LR}}$ term, $\left(\underline{a}_L + \yq^{-1} \circ(W_R^\top\zq)\right)^\top \underline{G} + \left(\yq \circ \underline{a}_R + W_L^\top \zq\right)^\top \underline{H}^\prime$. This can be written as follows.
+$$\left(\underline{a}^\top_L \underline{G} + \left(\yq \circ \underline{a}_R\right)^\top \underline{H}^\prime\right) + \left(\yq^{-1} \circ \left(W_R^\top \zq\right)\right)^\top \underline{G} + \zq^\top W_L \underline{H}^\prime$$
+$$\underbrace{\left(\underline{a}^\top_L \underline{G} + \underline{a}_R^\top \underline{H}\right)}_{A_I - \alpha H} + \underbrace{\left(\yq^{-1} \circ \left( W_R^\top \zq\right)\right)^\top\underline{G}}_{\widetilde{W}_R} + \underbrace{(W_L^\top \zq)^\top \underline{H}^\prime}_{\widetilde{W}_L}$$
+Thus, we have the following.
+\begin{align*}
+\underline{\ell}^\top \underline{G} + \underline{r}^\top \underline{H}^\prime + \mu H =& \widetilde{W}_O x^{j_O} + \sum_{k \in [n_c]} \widetilde{W}_k x^{i_{k+1}} \\
+& + \left(A_I - \alpha H + \widetilde{W}_R + \widetilde{W}_L\right)x^{i_{LR}} \\
+&+ \sum_{k \in [n_c]} \left(C_k - c_k^\prime H\right)x^{j_{k+1}} + (A_O - \beta H) x^{i_O} \\
+&  + (S - \rho H) x^{i_S} + \mu H 
+\end{align*}
+
+
+Lastly, for an honest prover, we have $\mu = x^{i_S} \rho + x^{i_O} \beta + x^{i_{LR}} \alpha + \sum_{k \in [n_c]} c_k^\prime x^{j_{k+1}}$. 
+\begin{align*}
+\underline{\ell}^\top \underline{G} + \underline{r}^\top \underline{H}^\prime + \mu H =& \widetilde{W}_O x^{j_O} + \sum_{k \in [n_c]} \widetilde{W}_k x^{i_{k+1}}  + \left(A_I + \widetilde{W}_R + \widetilde{W}_L\right)x^{i_{LR}} \\
+&+ \sum_{k \in [n_c]} \left(C_k\right)x^{j_{k+1}} + A_O x^{i_O}  + Sx^{i_S}
+\end{align*}
+
+
+
+This matches the verifier's point $P$ computed in Step \ref{compute-p}, i.e.\ the proof satisfies Equation \ref{eqn:verifyP}. On the other hand, an honest prover has the polynomial $t(X) = \underline{\ell}(X)^\top\underline{r}(X)$, and $\widehat{t} = t(X=x)$. So we have the following.
+\begin{align*}
+\widehat{t}G + \tau_x H =& \left(\sum_{k=\frac{n^\prime}{2}}^{2(n^\prime+1)} x^k \sum_{i+j=k} \underline{\ell}_i^\top\underline{r}_j\right)G + \tau_x H \\
+=& \left(x^{n^\prime} t_{n^\prime} + \sum_{k=\frac{n^\prime}{2}, k \neq n^\prime}^{2(n^\prime+1)} x^k t_k\right)G + \tau_x H\\
+=& x^{n^\prime} t_{n^\prime} G + \sum_{k=\frac{n^\prime}{2}, k \neq n^\prime}^{2(n^\prime+1)} x^k (T_k - \tau_k H) + \tau_x H\\
+=& x^{n^\prime} t_{n^\prime} G + \sum_{k=\frac{n^\prime}{2}, k \neq n^\prime}^{2(n^\prime+1)} x^k T_k + \left(\tau_x - \sum_{k=\frac{n^\prime}{2}, k \neq n^\prime}^{2(n^\prime+1)} x^k \tau_k\right)H
+\end{align*}
+For an honest prover, we have the following
+$$\tau_x = \sum_{k=\frac{n^\prime}{2}, k \neq n^\prime}^{2(n^\prime+1)} \tau_k x^k + x^{n^\prime} \zq^\top W_V \underline{\gamma}$$
+yielding
+$$\widehat{t}G + \tau_x H = x^{n^\prime} (t_{n^\prime} G + \zq^\top W_V \underline{\gamma} H) + \sum_{k=\frac{n^\prime}{2}, k \neq n^\prime}^{2(n^\prime+1)} x^k T_k$$
+Since $t_{n^\prime} = \sum_{i+j=n^\prime} \underline{\ell}_i^\top \underline{r}_j$ and $(\yq^{-1} \circ \underline{u})^\top (\yq \circ \underline{v}) = \underline{u}^\top \underline{v}$ for all $\underline{u}, \underline{v}$, it follows that
+\begin{align*}
+t_{n^\prime} =& \sum_{i + j = n^\prime} \underline{\ell}_i^\top \underline{r}_j = \sum_{i \in [n^\prime+2]}\sum_{j \in [n^\prime+2], i+j=n^\prime} \underline{\ell}_i^\top \underline{r}_j,\\
+=& \underline{\ell}_{i_O}^\top \underline{r}_{j_O} + \underline{\ell}_{i_{LR}}^\top \underline{r}_{j_{LR}} + \sum_{k \in [n_c]} \underline{\ell}_{i_{k+1}}^\top \underline{r}_{j_{k+1}} + \sum_{k \in [n_c]} \underline{\ell}_{j_{k+1}}^\top \underline{r}_{i_{k+1}} \\
+=& \underline{a}_O^\top (W^\top_O \zq - \yq) + (\underline{a}_L + \yq^{-1} \circ W_R^\top \zq)^\top(\yq \circ \underline{a}_R + W_L^\top \zq) \\& + \sum_{k \in [n_c]} \underbrace{\underline{0}^\top \left( \yq \circ \underline{c}_{k,R}\right)}_{\underline{\ell}_{i_{k+1}}^\top \underline{r}_{j_{k+1}}} + \underbrace{\underline{c}_{k,L}^\top W_{k,L}^\top \zq}_{\underline{\ell}_{j_{k+1}}^\top \underline{r}_{i_{k+1}}}\\
+=& \underline{a}_O^\top W_O^\top \zq - \underline{a}_O^\top \yq + \underline{a}_L^\top(\yq \circ \underline{a}_R) + \underline{a}_L^\top W_L^\top \zq \\
+& + \underbrace{\left(\yq^{-1}\circ\left(W_R^\top \zq\right)\right)^\top(\yq \circ \underline{a}_R)}_{= \underline{a}_R^\top W_R^\top \zq} + \underbrace{\left(\yq^{-1}\circ \left(W_R^\top \zq\right)\right)^\top W_L^\top \zq}_{=\delta(y,z)} + \sum_{k \in [n_c]} \underline{c}_{k,L}^\top W^\top_{k,L} \zq\\
+=& \zq\!^\top\!\left(\!W_O\underline{a}_O\!+\!W_L\underline{a}_L\!+\!W_R\underline{a}_R\!+\!\left(\!\sum_{k \in [n_c]}\!W_{k,L}\underline{c}_{k,L}\!\right)\!\right)\! + \!(\underline{a}_L\!\circ\!\underline{a}_R\!-\!\underline{a}_O\!)^\top\!\yq\!+\!\delta(y,z)\end{align*}
+We always have $\underline{a}_L^\top(\yq \circ \underline{a}_R) = (\underline{a}_L \circ \underline{a}_R)^\top \yq$, and for an honest prover, $\underline{a}_O = \underline{a}_L \circ \underline{a}_R$. Moreover, the honest prover has that the quantity in parentheses is exactly $W_V \underline{v} + \underline{c}$. 
+$$t_{n^\prime} = \zq^\top(W_V\underline{v} + \underline{c}) + \delta(y,z)$$
+Thus, the verification equation \ref{eqn:verifyT} is satisfied.
+\end{proof}
+
+The following proof appeared nearly word-for-word in \cite{aaron}, closely following Appendix D in the Bulletproofs preprint, with corresponding changes to accommodate the protocol modifications.
+The changes are nontrivial, so we include the full proof.
+
+\begin{lemma}
+The interactive protocol in Definition \ref{def:theprotocol} has special honest-verifier zero knowledge.
+\end{lemma}
+
+
+
+\begin{proof}
+To show perfect special honest-verifier zero knowledge, we construct a simulator that, given a statement and uniformly-sampled verifier challenges, can produce a valid proof transcript distributed identically to that of a real proof.
+
+Fix an arbitrary statement using $\mathcal{R}$, and sample verifier challenges $x, y, z \in \FF^*$ uniformly and independently from all other data and samples. The simulator begins by sampling $\underline{\ell}, \underline{r} \samp \FF^n$ uniformly and independently from all other data and samples, after which it computes the following.
+$$\widehat{t} =  \underline{\ell}^\top\underline{r}$$
+It then samples $\tau_x \samp \FF$ uniformly and independently from all other data and samples, and independently samples $T_k \samp \GG$ for each $\frac{n^\prime}{2} \leq k \leq 2n^\prime + 1$ such that $k \neq n^\prime$. With these, define
+\begin{multline*}
+T_{2n^\prime + 2} = -x^{-2n^\prime-2} \Biggl[ x^{n^\prime}\left( \delta(y, z) + \zq^\top\underline{c}  \right)G + x^{n^\prime} \zq^\top W_V \underline{V} \\
++ \sum_{k=\frac{n^\prime}{2}, k \neq n^\prime}^{2n^\prime + 1} x^k T_k - \widehat{t} G - \tau_x H \Biggr]
+\end{multline*}
+to satisfy verification equation \ref{eqn:verifyT}. There is nothing special about $T_{2n^\prime+2}$ here, as the simulator works if all but one $T_k$ is randomly sampled and the missing $T_k$ is defined similarly.
+
+The simulator next samples $A_I, A_O \samp \GG$, $\mu \samp \FF$ uniformly and independently from all other data and samples. It then computes $P$ as in protocol step \ref{compute-p} of the verifier's third round.
+\begin{multline*}
+P^\prime = \widetilde{W}_O + \sum_{k \in [n_c]} x^{i_{k+1}} \widetilde{W}_k + x^{i_{LR}}(A_I + \widetilde{W}_L + \widetilde{W}_R)  + \sum_{k\in [n_c]} x^{j_{k+1}}C_k + x^{i_O}A_O.
+\end{multline*}
+Finally, the simulator defines $S = -x^{-i_S}(P^\prime - \underline{\ell}^\top \underline{G} - \underline{r}^\top \underline{H}' - \mu H)$. Setting $P = P^\prime + x^{i_S}S$, equation \ref{eqn:verifyP} is satisfied by construction.
+
+The resulting simulated transcript is valid by definition, so it remains to show that it is distributed identically to that of a real proof. We show the marginal distributions match, and as all samples are independent, we conclude the distributions are identical. 
+
+In a real proof, openers for $A_I, A_O, S$ are sampled independently and uniformly, matching the distribution of their simulated counterparts. Similarly, in a real proof the elements $\tau_i$ are sampled uniformly at random, so the elements $T_i$ are distributed uniformly over all Pedersen commitments; the uniform sampling of nonzero $x$ and $z$ means $\tau_x$ is also distributed uniformly at random, and the same reasoning shows $T_{2n^\prime+2}$ in the simulation is uniform over $\GG$.
+
+Both $\underline{\ell}$ and $\underline{r}$ are constructed in a real proof using masking offsets $\underline{s}_L, \underline{s}_R$ sampled uniformly at random and applied against nonzero $x$ and $y$, so they are distributed uniformly at random in $\FF^n$ as well, matching the simulator's uniform sampling. Further, $\widehat{t}$ is defined identically in both a simulated and real proof. The value $\mu$ is distributed uniformly at random in a real proof given the nonzero random challenge $x$ and masks $\alpha, \beta, \rho$, matching the simulator's uniform sampling.
+
+Finally, in a real proof, $S = \underline{s}_L^\top \underline{G} + \underline{s}_R^\top \underline{H} + \rho H$, where $\rho \samp \FF$ is uniformly and independent of all other transcript data; hence $S$ is uniformly distributed over $\GG$. In the simulated transcript, $S$ is determined by the uniformly random $A_I, A_O, \mu, \underline{\ell}, \underline{r}$ via an affine relation with nonzero coefficient $-x^{-i_S}$, and is therefore also uniformly distributed over $\GG$.  Since each of $A_I$, $A_O$, each $T_k$ for $k \neq 2n^\prime + 2$, $\tau_x$, $\underline{\ell}$, $\underline{r}$, and $\mu$ are sampled independently and uniformly in both the real and simulated transcripts, and $S$, $T_{2n^\prime+2}$ are determined by these via the same affine relations as in the real proof's verification equations, the joint distributions must coincide.
+\end{proof}
+
+We sketch a proof of computational tree extractability by constructing a computational extractor $\mathcal{E}$ by nesting the forking algorithm \cite{bellare2006multi} applied to $\mathcal{P}$, yielding linear systems of equations whose solutions yield an extracted witness. We describe the extractor from the inside-out; we first describe the inner forking algorithm, $\mathcal{F}_x$, an intermediate forking algorithm, $\mathcal{F}_z$, and an outer forking algorithm, $\mathcal{F}_y$, as well as a final processing step to finish constructing $\mathcal{E}$.
+
+If a scheme is tree-extractable, then it has witness-extended emulation. Indeed, given a successful prover, run the tree-building subroutine, extract a witness from the tree data, and append the witness to the prover output.
+
+
+
+\begin{lemma}
+The protocol in Definition \ref{def:theprotocol} has computational tree extractability.
+\end{lemma}
+\begin{proof}[Sketch]
+The proof of tree-extractability following is very long. There are three major components: extracting from $\underline{T}$, extracting from $\underline{V}$, and then a bivariate vanishing argument. We detail the first two and only sketch the third.
+
+\paragraph{Extracting from $\underline{T}$.} Let $\mathcal{P}$ be an interactive algorithm which inputs a random tape $\xi$, and interacts with the verifier according to Definition \ref{def:theprotocol}, leading to an accepted transcript $\mathcal{T} = \left(\texttt{s}; (A_I, A_O, S); (y, z); \underline{T}; x; \pi\right)$. 
+We construct a computational extractor $\mathcal{E}$ as described above which constructs a tree of $N_y \cdot N_z \cdot N_x$ transcripts, where $N_y, N_z, N_x \in \mathbb{N}$ such that $N_y \geq n$, $N_z \geq Q+1$,  $N_x \geq \frac{3}{2}n^\prime+3$, and $N_xN_yN_z = O(nn^\prime Q)$ is polynomial by applying three forking algorithms as follows.
+
+We distinguish between \textit{transcript indices} due to the forking algorithm \cite{bellare2006multi} and \textit{protocol indices} by subscripting transcript indices with parentheses. Since the prover may not know any witness, we distinguish extracted data with a round overmark as follows. $$\overset{\LARGE \frown}{\small{\texttt{w}}} = \left(\underline{\overset{\LARGE \frown}{\small{a}}}_L, \underline{\overset{\LARGE \frown}{\small{a}}}_R, \underline{\overset{\LARGE \frown}{\small{a}}}_O, \left\{(\underline{\overset{\LARGE \frown}{\small{c}}}_{k,L}, \underline{\overset{\LARGE \frown}{\small{c}}}_{k,R})\right\}_{k \in [n_c]}, \underline{\overset{\LARGE \frown}{\small{v}}}, \underline{\overset{\LARGE \frown}{\small{\gamma}}},  \underline{\overset{\LARGE \frown}{\small{c}}}^\prime\right)$$
+
+
+The inner forking algorithm, $\mathcal{F}_x$  inputs a random tape $\xi_{\mathcal{P}}$ for $\mathcal{P}$, challenges $y$ and $z$, and a sequence of some $N_x$ distinct challenges $\left\{x_{(k)}\right\}_{k \in [N_x]}$; if the challenges in the sequence $\left\{x_{(k)}\right\}_{k \in [N_x]}$ are not all distinct, output a distinct failure symbol and terminate. Otherwise, $\mathcal{F}_x$ computes $\mathcal{T}_{(k)} \leftarrow \mathcal{P}(\xi_{\mathcal{P}}, y, z, x_{(k)})$ for each $k \in [N_x]$. Lastly, $\mathcal{F}_x$ outputs $\left\{\mathcal{T}_{(k)}\right\}_{k \in [N_x]}$. We denote this as follows.
+$$\left\{\mathcal{T}_{(k)}\right\}_{k \in [N_x]} \leftarrow \mathcal{F}_x\left(\xi_{\mathcal{P}}, y, z, \left\{x_{(k)}\right\}_{k \in [N_x]}\right)$$
+
+The intermediate forking algorithm, $\mathcal{F}_z$, inputs a random tape $\xi_{\mathcal{P}}$ for $\mathcal{P}$, a challenge $y$, a sequence of some $N_z \geq Q+1$ distinct challenges $\left\{z_{(j)}\right\}_{j \in [N_z]}$, and a doubly-indexed sequence of $N_z \cdot N_x$ distinct challenges $\left\{x_{(j,k)}\right\}_{(j,k) \in [N_z] \times [N_x]}$, terminating on non-distinct input as for $\mathcal{F}_x$.  $\mathcal{F}_z$ then executes $\mathcal{F}_x$ with input $\left(\xi_{\mathcal{P}}, y, z_{(j)}, \left\{x_{(j,k)}\right\}_{k \in [N_x]}\right)$ for each $j \in [N_z]$ to obtain $\left\{\mathcal{T}_{(j,k)}\right\}_{k \in [N_x]}$ for each $j \in [N_z]$. Lastly, $\mathcal{F}_z$ outputs $\left\{\mathcal{T}_{(j,k)}\right\}_{(j,k) \in [N_z] \times [N_x]}$. We abuse notation to denote slightly as follows for more compact notation, by packing each $z_{(j)}$ together with each $x_{(j,k)}$ into a pair.
+$$\left\{\mathcal{T}_{(j,k)}\right\}_{(j,k) \in [N_z] \times [N_x]} \leftarrow \mathcal{F}_z\left(\xi_{\mathcal{P}}, y, \left\{(z_{(j)}, x_{(j,k)})\right\}_{(j,k) \in [N_z] \times [N_x]}\right)$$
+
+The outer forking algorithm, $\mathcal{F}_y$, inputs a random tape $\xi_{\mathcal{P}}$ for $\mathcal{P}$, a sequence of some $N_y$ distinct challenges $\left\{y_{(i)}\right\}_{i \in [N_y]}$, a doubly-indexed sequence of $N_y \cdot N_z$ distinct challenges $\left\{z_{(i,j)}\right\}_{(i,j) \in [N_y] \times [N_z]}$, and a triply-indexed sequence of $N_y \cdot N_z \cdot N_x$ distinct challenges $\left\{x_{(i,j,k)}\right\}_{(i,j,k) \in [N_y] \times [N_z] \times [N_x]}$, terminating on non-distinct input as above. $\mathcal{F}_y$ then executes $\mathcal{F}_z$ with input $\left(\xi_{\mathcal{P}}, y_{(i)}, \left\{z_{(i,j)}\right\}_{j \in [N_z]}, \left\{x_{(i,j,k)}\right\}_{(j,k) \in [N_z] \times [N_x]}\right)$ for each $i \in [N_y]$ to obtain and output a triply-indexed set of transcripts $\left\{\mathcal{T}_{(i,j,k)}\right\}_{(i,j,k) \in [N_y] \times [N_z] \times [N_x]}$. 
+$$\left\{\mathcal{T}_{(i,j,k)}\right\}_{(i,j,k) \in [N_y] \times [N_z] \times [N_x]} \leftarrow \mathcal{F}_y\!\left(\!\xi_{\mathcal{P}},\! \left\{\!(y_{(i)},z_{(i,j)},x_{(i,j,k)})\!\right\}\!_{(i,j,k)\!\in\![N_y]\!\times\![N_z]\!\times\! [N_x]}\right)$$ We append indices $(i,j,k)$ (including parentheses) to variables computed during execution of the protocol like $T_{n^\prime, (i,j)}$, $\pi_{(i,j,k)}$, and so on, to specify the source transcript of the variable value.
+
+We now describe an extractor algorithm $\mathcal{E}$ which runs $\mathcal{F}_y$ as a sub-routine, and processes the output to construct the witness. First, $\mathcal{E}$ inputs a random tape $\xi_{\mathcal{E}}$, independently samples a random tape $\xi_{\mathcal{P}}$ for $\mathcal{P}$ using its random tape, and independently samples a triply-indexed set of challenge triples $\left\{(y_{(i)}, z_{(i,j)}, x_{(i,j,k)})\right\}_{(i,j,k) \in [N_y] \times [N_z] \times [N_x]}$, re-sampling until all distinctness conditions are met. Since the challenge space is exponential in the security parameter, the probability of any collision is negligible, so the number of re-samples expected by $\mathcal{E}$ is polynomial.
+
+To process the output, $\mathcal{E}$ constructs a tree of height three and with $N_y \cdot N_z \cdot N_x$ leaves such that the children of the root are labeled with the challenges $\left\{y_{(i)}\right\}_{i \in [N_y]}$, the grandchildren of the root are labeled with the challenge pairs $\left\{(y_{(i)}, z_{(i,j)})\right\}_{(i,j) \in [N_y] \times [N_z]}$, and the leaves are labeled with the transcripts  $\left\{\mathcal{T}_{(i,j,k)}\right\}_{(i,j,k) \in [N_y] \times [N_z] \times [N_x]}$. Each path in the tree then uniquely identifies a challenge triple $(y_{(i)}, z_{(i,j)}, x_{(i,j,k)})$ satisfying the distinctness conditions above with a corresponding accepting transcript $\mathcal{T}_{(i,j,k)}$. By construction of the forking algorithm and the general forking lemma \cite{bellare2006multi}, all transcripts prove for the same statement, and all information before the first challenge appears is identical in all transcripts.  In particular, the statement and the first message $(A_I, A_O, S)$ do not depend on the index triple $(i,j,k)$, and the responses by the prover $\underline{T}_{(i,j,k)}$ do not depend on $k$. Thus, we drop these from our notation so a transcript is as follows.
+$$\mathcal{T}_{(i,j,k)} = \left(\texttt{s}; (A_I, A_O, S); (y_{(i)}, z_{(i,j)}); \underline{T}_{(i,j)}; x_{(i,j,k)}; \pi_{(i,j,k)}\right)$$
+
+Since $\GG$ is cyclic and $G, H$ are distinct non-identity\footnote{In fact, it is sufficient for either $G$ or $H$ to be non-identity, but in practice, both are non-identity.} elements, there exists at least one pair $\underline{\overset{\LARGE \frown}{\small{v}}}, \underline{\overset{\LARGE \frown}{\small{\gamma}}} \in \mathbb{F}^m$ such that $\underline{V} = \underline{\overset{\LARGE \frown}{\small{v}}}G + \underline{\overset{\LARGE \frown}{\small{\gamma}}}H$.  
+Substitute these into verification equation \ref{eqn:verifyT} from the $(i,j,k)$-th transcript.
+\begin{align*}
+\sum_{u=\frac{n^\prime}{2}}^{2(n^\prime+1)} x^u_{(i,j,k)} T_{u, (i,j)} &= \widehat{t}_{(i,j,k)}G + \tau_{x,(i,j,k)}H \\
+\text{ where }T_{n^\prime,(i,j)} &=\!\left(\!\delta\!(\!y_{(i)}\!,z_{(i,j)}\!)\!+\!\zq_{(i,j)}^\top\!\left(\!\underline{c} + W_V \underline{\overset{\LARGE \frown}{\small{v}}}\!\right)\!\right)\!G + \zq_{(i,j)}\!^\top\!W_V\!\underline{\overset{\LARGE \frown}{\small{\gamma}}}\!H 
+\end{align*}
+
+For each $(i,j)$ pair, $\mathcal{E}$ searches for coefficient sequences $\left\{\nu_{(i,j,k)}\right\}_{k \in [N_x]}$ to use in linear combinations summing over the transcript index $(k)$. An arbitrary linear combination looks like so.
+$$\sum_{k \in [N_x]} \nu_{(i,j,k)} \left(\sum_{u=\frac{n^\prime}{2}}^{2(n^\prime+1)} x^u_{(i,j,k)} T_{u, (i,j)}\right) = \sum_{k \in [N_x]} \nu_{(i,j,k)}\left(\widehat{t}_{(i,j,k)}G + \tau_{x,(i,j,k)}H\right)$$
+On the left-hand side, finite sums of finite sums commute. On the right-hand side, we can collect all terms by $G$ and $H$.
+$$\sum_{u=\frac{n^\prime}{2}}^{2(n^\prime\!+\!1)}\!T_{u, (i,j)}\!\left(\!\sum_{k\!\in\![N_x]}\!\nu_{\!(\!i\!,j\!,k\!)}\!x^u_{\!(\!i\!,j\!,k\!)}\!\!\right)\!=\!\left(\!\sum_{k\!\in\![N_x]}\!\nu_{\!(\!i\!,j\!,k\!)}\widehat{t}_{\!(\!i\!,j\!,k)}\!\right)\!G\!+\!\left(\!\sum_{k\!\in\![\!N_x\!]}\nu_{\!(\!i\!,j\!,k)}\tau_{x\!,(\!i\!,j\!,k)}\!\right)\!H$$
+
+For each $\frac{n^\prime}{2} \leq u^* \leq 2n^\prime+2$, $\mathcal{E}$ can, with high probability, find a choice of $\left\{\nu_{(i,j,k)}\right\}_{k \in [N_x]}$ so that, for all $\frac{n^\prime}{2} \leq u \leq 2n^\prime + 2$, $\sum_k \nu_{(i,j,k)} x^u_{(i,j,k)} = I(u=u^*)$ by solving  the following system of equations for each $u^*$.
+\[\left\{\sum_{k \in [N_x]} \nu_{u^*,(i,j,k)} x_{(i,j,k)}^u = I(u^* = u)\right\}_{\frac{n^\prime}{2} \leq u \leq 2n^\prime+2}\]
+Each of these systems consists of $\frac{3}{2}n^\prime + 3$ equations with $N_x$ unknowns. We call solving this system \textit{isolating the monomial $x^{u^*}$}.
+Recall elements of $\left\{x_{(i,j,k)}\right\}_{k \in [N_x]}$ are sampled to be distinct, so whenever $N_x \geq \frac{3}{2}n^\prime + 3$, isolating each monomial $x^{u^*}$ certainly admits at least one solution.
+For each $(u^*,i,j)$, we have $\sum_{k \in [N_x]} \nu_{u^*,(i,j,k)} x_{(i,j,k)}^u = I(u=u^*)$, so $$\sum_u T_{u, (i,j)} \sum_k \nu_{u^*,(i,j,k)} x^u_{(i,j,k)} = T_{u^*,(i,j)}.$$ Different choices of $u^*$  isolate different monomials to open $\underline{T}$. For each $\frac{n^\prime}{2} \leq u \leq 2n^\prime+2$, we have the following.
+\begin{align*}
+\left(\sum_{k \in [N_x]} \nu_{u,(i,j,k)}\widehat{t}_{(i,j,k)}\right)G + \left(\sum_{k \in [N_x]} \nu_{u,(i,j,k)}\tau_{x,(i,j,k)}\right)H =& 
+ T_{u, (i,j)}
+\end{align*}
+This way $\mathcal{E}$  learns 
+$T_{u, (i,j)} = \overset{\LARGE \frown}{\small{t}}_{u,(i,j)}G + \overset{\LARGE \frown}{\small{\tau}}_{u,(i,j)}H$  where
+\begin{align}
+\overset{\LARGE \frown}{\small{t}}_{u, (i,j)} =& \sum_{k \in [N_x]} \nu_{u,(i,j,k)}\widehat{t}_{(i,j,k)}\text{ and } \label{extracted_t}\\
+\overset{\LARGE \frown}{\small{\tau}}_{u, (i,j)} =& \sum_{k \in [N_x]} \nu_{u,(i,j,k)} \tau_{x,(i,j,k)}. \label{extracted_tau}
+\end{align} 
+
+\paragraph{Extracting from $\underline{V}$.} Valid proofs satisfy $T_{n^\prime,(i,j)} = (\delta(y_{(i)},z_{(i,j)}) + \zq^\top_{(i,j)} \underline{c})G + \zq^\top_{(i,j)} W_V \underline{V}$. Moreover, we have $\underline{V} = \underline{\overset{\LARGE \frown}{\small{v}}}G + \underline{\overset{\LARGE \frown}{\small{\gamma}}}H$. Substituting provides the following.
+$$\left(\delta(y_{(i)},z_{(i,j)}) + \zq_{(i,j)}^\top\left(\underline{c} + W_V \underline{\overset{\LARGE \frown}{\small{v}}}\right)\right)G + \zq_{(i,j)}^\top W_V \underline{\overset{\LARGE \frown}{\small{\gamma}}}H  = \overset{\LARGE \frown}{\small{t}}_{n^\prime, (i,j)}G + \overset{\LARGE \frown}{\small{\tau}}_{n^\prime, (i,j)}H$$
+$$\left(\overset{\LARGE \frown}{\small{t}}_{n^\prime,(i,j)} - \delta(y_{(i)},z_{(i,j)}) - \zq^\top_{(i,j)} \underline{c} - \zq^\top_{(i,j)} W_V \underline{\overset{\LARGE \frown}{\small{v}}}\right)G = \left(\zq^\top_{(i,j)} W_V \underline{\overset{\LARGE \frown}{\small{\gamma}}} - \overset{\LARGE \frown}{\small{\tau}}_{n^\prime,(i,j)}\right) H$$
+
+If either of the coefficients on $G$ or $H$ here is non-zero, then the extractor learns a discrete logarithm or a discrete logarithm relationship, producing a non-trivial DLP relation, contradicting the discrete logarithm assumption. So, any PPT algorithm will find both coefficients to be zero except perhaps with negligible probability.
+\begin{align}
+\overset{\LARGE \frown}{\small{t}}_{n^\prime,(i,j)} = \delta(y_{(i)},z_{(i,j)}) + \zq_{(i,j)}^\top\left( \underline{c} +  W_V \underline{\overset{\LARGE \frown}{\small{v}}}\right)
+\label{eqn:onion}
+\end{align}
+$$\overset{\LARGE \frown}{\small{\tau}}_{n^\prime,(i,j)} = \zq^\top_{(i,j)} W_V \underline{\overset{\LARGE \frown}{\small{\gamma}}}$$
+$\mathcal{E}$ learns the left-hand side of these equations from the transcripts in Equations \ref{extracted_t} and \ref{extracted_tau}, but not $\underline{\overset{\LARGE \frown}{\small{v}}}$ or $\underline{\overset{\LARGE \frown}{\small{\gamma}}}$ yet. For convenience, for each $i \in [N_y]$, pack into vectors/matrices as follows.
+\begin{align*}
+    \underline{\overset{\LARGE \frown}{\small{t}}}_{n^\prime, (i)} &= (\overset{\LARGE \frown}{\small{t}}_{n^\prime, (i,j)})^\top_{j \in [N_z]} \in \FF^{N_z} \\
+    \underline{\overset{\LARGE \frown}{\small{\tau}}}_{n^\prime, (i)} &= (\overset{\LARGE \frown}{\small{\tau}}_{n^\prime, (i,j)})^\top_{j \in [N_z]} \in \FF^{N_z} \\
+    \underline{\delta}_{(i)} &= (\delta(y_{(i)}, z_{(i,j)}) + \zq^\top_{(i,j)} \underline{c})_{j \in [N_z]} \in \FF^{N_z} \\
+    Z_{(i)} &= (\zq_{(i,0)} \mid \zq_{(i,1)} \mid \cdots \mid \zq_{(i,N_z-1)}) \in \mathbb{F}^{Q \times N_z} 
+\end{align*}
+Then $\underline{\overset{\LARGE \frown}{\small{v}}}$ and $\underline{\overset{\LARGE \frown}{\small{\gamma}}}$ satisfy the following.
+\begin{align*}
+\underline{\overset{\LARGE \frown}{\small{t}}}_{n^\prime, (i)} =& \underline{\delta}_{(i)} + Z^\top_{(i)}W_V\underline{\overset{\LARGE \frown}{\small{v}}} \\
+\underline{\overset{\LARGE \frown}{\small{\tau}}}_{n^\prime, (i)} =& Z^\top_{(i)} W_V\underline{\overset{\LARGE \frown}{\small{\gamma}}}
+\end{align*}
+To solve for the witness data $\underline{\overset{\LARGE \frown}{\small{v}}}$ and $\underline{\overset{\LARGE \frown}{\small{\gamma}}}$, first re-arrange terms.
+\begin{align*}
+    Z^\top_{(i)} W_V\underline{\overset{\LARGE \frown}{\small{v}}} &= \underline{\overset{\LARGE \frown}{\small{t}}}_{n^\prime, (i)} - \underline{\delta}_{(i)} \\
+    Z^\top_{(i)} W_V\underline{\overset{\LARGE \frown}{\small{\gamma}}} &= \underline{\overset{\LARGE \frown}{\small{\tau}}}_{n^\prime, (i)} 
+\end{align*}
+Next, define the matrix $M_{(i)} = W_V^\top Z_{(i)}Z^\top_{(i)} W_V$ and multiply on the left.
+\begin{align*}
+M_{(i)}\underline{\overset{\LARGE \frown}{\small{v}}} =& W_V^\top Z_{(i)}\left(\underline{\overset{\LARGE \frown}{\small{t}}}_{n^\prime, (i)} - \underline{\delta}_{(i)}\right) \\
+M_{(i)}\underline{\overset{\LARGE \frown}{\small{\gamma}}} =& W_V^\top Z_{(i)}\underline{\overset{\LARGE \frown}{\small{\tau}}}_{n^\prime, (i)} 
+\end{align*}
+Each $M_{(i)}$ is certainly square. Moreover, $M_{(i)}$ is invertible except with negligible probability due to the DeMillo-Lipton-Schwartz-Zippel lemma (\cite{demillo1977probabilistic}, \cite{zippel1979probabilistic}, \cite{schwartz1980fast}). Indeed, $W_V$ is rank $m$, $N_z \geq m$, the forking algorithms described above enforce distinct choices of $\zq_{(i,j)}$, and $\det(M_{(i)})$ is a non-zero polynomial in $\left\{z_{(i,j)}\right\}_{j \in [N_z]}$ of total degree at most $2mQ$.
+
+
+
+So, $\mathcal{E}$ multiplies on the left by the inverse $M^{-1}_{(i)}$ to extract $\underline{\overset{\LARGE \frown}{\small{v}}}$ and $\underline{\overset{\LARGE \frown}{\small{\gamma}}}$ as promised; further note the following holds for each $i \in [N_y]$.
+\begin{align*} 
+\underline{\overset{\LARGE \frown}{\small{v}}} =& M^{-1}_{(i)}W_V^\top Z_{(i)}\left(\underline{\overset{\LARGE \frown}{\small{t}}}_{n^\prime, (i)} - \underline{\delta}_{(i)}\right) \\
+\underline{\overset{\LARGE \frown}{\small{\gamma}}} =& M^{-1}_{(i)}W_V^\top Z_{(i)}\underline{\overset{\LARGE \frown}{\small{\tau}}}_{n^\prime, (i)}
+\end{align*}
+\textit{A priori}, the right-hand side of these equations depend on $i$, so we define $\underline{\overset{\LARGE \frown}{\small{v}}}_{(i)} = M^{-1}_{(i)}W_V^\top Z_{(i)}\left(\underline{\overset{\LARGE \frown}{\small{t}}}_{n^\prime, (i)} - \underline{\delta}_{(i)}\right)$ and $\underline{\overset{\LARGE \frown}{\small{\gamma}}}_{(i)} = M^{-1}_{(i)}W_V^\top Z_{(i)}\underline{\overset{\LARGE \frown}{\small{\tau}}}_{n^\prime, (i)}$. 
+
+Recall $\underline{\overset{\LARGE \frown}{\small{v}}}$ and $\underline{\overset{\LARGE \frown}{\small{\gamma}}}$ decompose $\underline{V}$ with respect to $G, H$. By Equation \ref{eqn:onion}, $\underline{\overset{\LARGE \frown}{\small{t}}}_{n^\prime, (i)} = \underline{\delta}_{(i)} + Z^\top_{(i)}W_V \underline{\overset{\LARGE \frown}{\small{v}}}$, so these agree across all $i \in [N_y]$ as follows.
+$$\underline{\overset{\LARGE \frown}{\small{v}}}_{(i)} = M^{-1}_{(i)} W^\top_V Z_{(i)}\left(\underline{\overset{\LARGE \frown}{\small{t}}}_{n^\prime,(i)} - \underline{\delta}_{(i)}\right) = M_{(i)}^{-1}M_{(i)}\underline{\overset{\LARGE \frown}{\small{v}}} = \underline{\overset{\LARGE \frown}{\small{v}}}$$
+Thus, we drop the indices on $\underline{\overset{\LARGE \frown}{\small{v}}}_{(i)}$. A similar argument applied to $\underline{\overset{\LARGE \frown}{\small{\tau}}}_{n^\prime, (i)}$ gives $\underline{\overset{\LARGE \frown}{\small{\gamma}}}_{(i)} = \underline{\overset{\LARGE \frown}{\small{\gamma}}}$ for all $i$.
+
+Next, $\mathcal{E}$ opens the Pedersen vector commitments $\left\{C_k\right\}_{k \in [n_c]}$ from verification equation \ref{eqn:verifyP} as follows, repeating a similar procedure to isolate coefficients on the monomials of $x$. 
+Similar to how the previous step requires $N_x \geq \frac{3}{2}n^\prime + 3$ to isolate monomials in $x$, this step needs $N_x \geq n^\prime + 2$ because the relevant index range is $[n^\prime+2] = \left\{0,1,\ldots,n^\prime+1\right\}$.
+The former certainly implies the latter.
+
+Using the same coefficients as above, we obtain the following decompositions of the proof data as follows by looking at the monomials on the right-hand side of verification equation \ref{eqn:verifyP}.
+\begin{align*}
+\sum_{k\in [N_x]} \nu_{j_O,(i,j,k)}P_{(i,j,k)} =&  \widetilde{W}_{O, (i,j)} \\ 
+\forall u \in [n_c], \sum_{k\in [N_x]} \nu_{i_{u+1},(i,j,k)}P_{(i,j,k)} =& \widetilde{W}_{u, (i,j)}  \\
+\sum_{k\in [N_x]} \nu_{i_{LR},(i,j,k)}P_{(i,j,k)} =&  A_I + \widetilde{W}_{R,(i,j)} + \widetilde{W}_{L,(i,j)} \\ 
+\forall u \in [n_c], \sum_{k \in [N_x]} \nu_{j_{u+1},(i,j,k)}P_{(i,j,k)} =& C_u \\ 
+\sum_{k\in [N_x]} \nu_{i_O,(i,j,k)}P_{(i,j,k)} =&  A_O \\
+\sum_{k\in [N_x]} \nu_{i_S,(i,j,k)}P_{(i,j,k)} =&  S  
+\end{align*}
+  
+Since $P_{(i,j,k)} = \underline{\ell}_{(i,j,k)}^\top \underline{G} + \underline{r}_{(i,j,k)}^\top \underline{H}^\prime_{(i)} + \mu_{(i,j,k)}H$ in valid transcripts, define the following for each $(i,j) \in [N_y] \times [N_z]$.
+\begin{align*}  
+\underline{\overset{\LARGE \frown}{\small{a}}}_{L, (i,j)} =& \sum_{k \in [N_x]} \nu_{i_{LR},(i,j,k)} \underline{\ell}_{(i,j,k)} -  \yq^{-1}_{(i)} \circ \left(W_R^\top\zq_{(i,j)}\right) \\
+\underline{\overset{\LARGE \frown}{\small{a}}}_{R,(i,j)} =& \yq^{-1}_{(i)} \circ \left(\sum_{k \in [N_x]} \nu_{i_{LR},(i,j,k)}\underline{r}_{(i,j,k)}  - W_L^\top\zq_{(i,j)}\right) \\
+\overset{\LARGE \frown}{\small{\alpha}}_{(i,j)} =& \sum_{k \in [N_x]} \nu_{i_{LR},(i,j,k)} \mu_{(i,j,k)}  \\
+\underline{\overset{\LARGE \frown}{\small{b}}}_{L, (i,j)} =& \sum_{k \in [N_x]} \nu_{i_O,(i,j,k)} \underline{\ell}_{(i,j,k)} \\
+\underline{\overset{\LARGE \frown}{\small{b}}}_{R, (i,j)} =& \yq^{-1}_{(i)} \circ \sum_k \nu_{i_O,(i,j,k)} \underline{r}_{(i,j,k)} \\
+\overset{\LARGE \frown}{\small{\beta}}_{(i,j)} =& \sum_{k \in [N_x]} \nu_{i_O, (i,j,k)} \mu_{(i,j,k)}  \\
+\underline{\overset{\LARGE \frown}{\small{s}}}_{L, (i,j)} =& \sum_{k \in [N_x]} \nu_{i_S, (i,j,k)}\underline{\ell}_{(i,j,k)} \\
+\underline{\overset{\LARGE \frown}{\small{s}}}_{R, (i,j)} =& \yq^{-1}_{(i)} \circ \sum_{k \in [N_x]} \nu_{i_S, (i,j,k)}\underline{r}_{(i,j,k)} \\
+\overset{\LARGE \frown}{\small{\rho}}_{(i,j)} =& \sum_{k \in [N_x]} \nu_{i_S, (i,j,k)}\mu_{(i,j,k)}  \\
+\forall u \in [n_c], \underline{\overset{\LARGE \frown}{\small{c}}}_{u,L,(i,j)} =& \sum_{k \in [N_x]} \nu_{j_{u+1}, (i,j,k)} \underline{\ell}_{(i,j,k)}\\
+\forall u \in [n_c], \underline{\overset{\LARGE \frown}{\small{c}}}_{u,R,(i,j)} =& \yq^{-1}_{(i)} \circ  \sum_{k \in [N_x]} \nu_{j_{u+1}, (i,j,k)} \underline{r}_{(i,j,k)}\\
+\forall u \in [n_c], \overset{\LARGE \frown}{\small{c}}_{u, (i,j)}^\prime =& \sum_{k \in [N_x]} \nu_{j_{u+1}, (i,j,k)} \mu_{(i,j,k)} 
+\end{align*}
+
+These satisfy the following for each $(i, j) \in [N_y] \times [N_z]$.
+\begin{align*}
+A_I =& \underline{\overset{\LARGE \frown}{\small{a}}}_{L, (i,j)}^\top \underline{G} + \underline{\overset{\LARGE \frown}{\small{a}}}_{R, (i,j)}^\top \underline{H} + \overset{\LARGE \frown}{\small{\alpha}}_{(i,j)} H \\
+A_O =& \underline{\overset{\LARGE \frown}{\small{b}}}_{L, (i,j)}^\top \underline{G} + \underline{\overset{\LARGE \frown}{\small{b}}}_{R, (i,j)}^\top \underline{H} + \overset{\LARGE \frown}{\small{\beta}}_{(i,j)} H  \\
+S =& \underline{\overset{\LARGE \frown}{\small{s}}}_{L, (i,j)}^\top \underline{G} + \underline{\overset{\LARGE \frown}{\small{s}}}_{R, (i,j)}^\top \underline{H} + \overset{\LARGE \frown}{\small{\rho}}_{(i,j)} H  \\
+\forall u \in [n_c],C_u =& \underline{\overset{\LARGE \frown}{\small{c}}}_{u,L, (i,j)}^\top \underline{G} + \underline{\overset{\LARGE \frown}{\small{c}}}_{u,R, (i,j)}^\top \underline{H} + \overset{\LARGE \frown}{\small{c}}_{u, (i,j)}^\prime H
+\end{align*}
+
+Thus these data open the commitments $A_I$, $A_O$, $S$, and $\left\{C_u\right\}_{u \in [n_c]}$ by construction. 
+If the extractions differ for any $(i,j) \neq (i^\prime,j^\prime) \in [N_y] \times [N_z]$, then we learn a discrete logarithm relation between the generators $\underline{G}$, $\underline{H}$, and $H$; two distinct openings, say, $$A_I = \underline{\overset{\LARGE \frown}{\small{a}}}_{L, (i,j)}^\top \underline{G} + \underline{\overset{\LARGE \frown}{\small{a}}}_{R, (i,j)}^\top \underline{H} + \overset{\LARGE \frown}{\small{\alpha}}_{(i,j)} H = (\underline{\overset{\LARGE \frown}{\small{a}}}_{L, (i,j)}^*)^\top \underline{G} + (\underline{\overset{\LARGE \frown}{\small{a}}}_{R, (i,j)}^*)^\top \underline{H} + \overset{\LARGE \frown}{\small{\alpha}}_{(i,j)}^* H,$$ then the difference yields the following non-trivial discrete logarithm statement like so:
+$$\left(\underline{\overset{\LARGE \frown}{\small{a}}}_{L, (i,j)} - \underline{\overset{\LARGE \frown}{\small{a}}}_{L, (i,j)}^*\right)^\top \underline{G} + \left(\underline{\overset{\LARGE \frown}{\small{a}}}_{R, (i,j)} - \underline{\overset{\LARGE \frown}{\small{a}}}_{R, (i,j)}^*\right)^\top \underline{H} + \left(\overset{\LARGE \frown}{\small{\alpha}}_{(i,j)} - \overset{\LARGE \frown}{\small{\alpha}}_{(i,j)}^*\right) H = O.$$
+Any PPT has at most a negligible advantage at finding such a  relationship, so this can only occur with negligible probability.
+
+\paragraph{Bivariate Vanishing.} Now
+$\mathcal{E}$ defines $\underline{\overset{\LARGE \frown}{\small{a}}}_{O,(i,j)} = \underline{\overset{\LARGE \frown}{\small{b}}}_{L,(i,j)}$ and has the following candidate witness.
+$$\overset{\LARGE \frown}{\small{\texttt{w}}} = \left(\underline{\overset{\LARGE \frown}{\small{a}}}_L, \underline{\overset{\LARGE \frown}{\small{a}}}_R, \underline{\overset{\LARGE \frown}{\small{a}}}_O, \left\{(\underline{\overset{\LARGE \frown}{\small{c}}}_{k,L}, \underline{\overset{\LARGE \frown}{\small{c}}}_{k,R})\right\}_{k \in [n_c]}, \underline{\overset{\LARGE \frown}{\small{v}}}, \underline{\overset{\LARGE \frown}{\small{\gamma}}},  \underline{\overset{\LARGE \frown}{\small{c}}}^\prime\right)$$
+
+It remains to show $\overset{\LARGE \frown}{\small{\texttt{w}}}$ satisfies the following.
+\begin{align}
+\underline{\overset{\LARGE \frown}{\small{a}}}_{O} =& \underline{\overset{\LARGE \frown}{\small{a}}}_{L} \circ\underline{\overset{\LARGE \frown}{\small{a}}}_{R} \label{eqn:ac_sat} \\
+W_V \underline{\overset{\LARGE \frown}{\small{v}}} + \underline{c} =& W_L \underline{\overset{\LARGE \frown}{\small{a}}}_L + W_{R} \underline{\overset{\LARGE \frown}{\small{a}}}_R + W_O \underline{\overset{\LARGE \frown}{\small{a}}}_O + \sum_{k \in [n_c]} W_{k,L} \underline{\overset{\LARGE \frown}{\small{c}}}_{k,L}\label{eqn:linear_constraints}
+\end{align}
+
+Each valid transcript satisfies the following in order to pass verification.
+\begin{align*}
+P_{(i,j,k)} =& \widetilde{W}_{O, (i,j)} + \sum_{u \in [n_c]} x_{(i,j,k)}^{i_{u+1}} \widetilde{W}_{u, (i,j)} + x_{(i,j,k)}^{i_{LR}}(A_I + \widetilde{W}_{L,(i,j)} + \widetilde{W}_{R,(i,j)}) \\& + \sum_{u \in [n_c]} x_{(i,j,k)}^{j_{u+1}} C_u + x_{(i,j,k)}^{i_O} A_O + x_{(i,j,k)}^{i_S} S
+\end{align*}
+
+Substitute our extractions into the right-hand side of this equation.
+\begin{align}
+P_{(i,j,k)} =& \widetilde{W}_{O, (i,j)} + \sum_{u \in [n_c]} x_{(i,j,k)}^{i_{u+1}} \widetilde{W}_{u, (i,j)} \label{eqn:tomato}\\
+&  + x_{(i,j,k)}^{i_{LR}}\left(\underline{\overset{\LARGE \frown}{\small{a}}}_{L, (i,j)}^\top \underline{G} + \underline{\overset{\LARGE \frown}{\small{a}}}_{R, (i,j)}^\top \underline{H} + \overset{\LARGE \frown}{\small{\alpha}}_{(i,j)} H + \widetilde{W}_{L,(i,j)} + \widetilde{W}_{R,(i,j)}\right) \notag\\
+& + \sum_{u \in [n_c]} x_{(i,j,k)}^{j_{u+1}} \left(\underline{\overset{\LARGE \frown}{\small{c}}}_{u,L, (i,j)}^\top \underline{G} + \underline{\overset{\LARGE \frown}{\small{c}}}_{u,R, (i,j)}^\top \underline{H} + \overset{\LARGE \frown}{\small{c}}_{u, (i,j)}^\prime H\right) \notag\\
+& + x_{(i,j,k)}^{i_O} \left(\underline{\overset{\LARGE \frown}{\small{b}}}_{L, (i,j)}^\top \underline{G} + \underline{\overset{\LARGE \frown}{\small{b}}}_{R, (i,j)}^\top \underline{H} + \overset{\LARGE \frown}{\small{\beta}}_{(i,j)} H\right) \notag\\
+& + x_{(i,j,k)}^{i_S}\left(\underline{\overset{\LARGE \frown}{\small{s}}}_{L, (i,j)}^\top \underline{G} + \underline{\overset{\LARGE \frown}{\small{s}}}_{R, (i,j)}^\top \underline{H} + \overset{\LARGE \frown}{\small{\rho}}_{(i,j)} H\right)  \notag\\
+=& \widetilde{W}_{O, (i,j)} + \sum_{u \in [n_c]} x_{(i,j,k)}^{i_{u+1}} \widetilde{W}_{u, (i,j)} + x^{i_{LR}}_{(i,j,k)} \left(\widetilde{W}_{L,(i,j)} + \widetilde{W}_{R,(i,j)}\right) \notag\\
+&+ \left(x^{i_{LR}}_{(i,j,k)}\underline{\overset{\LARGE \frown}{\small{a}}}_{L, (i,j)} + \sum_{u \in [n_c]} x^{j_{u+1}}_{(i,j,k)} \underline{\overset{\LARGE \frown}{\small{c}}}_{u,L, (i,j)} + x^{i_O}_{(i,j,k)}\underline{\overset{\LARGE \frown}{\small{b}}}_{L, (i,j)} + x^{i_S}_{(i,j,k)} \underline{\overset{\LARGE \frown}{\small{s}}}_{L, (i,j)} \right)^\top\underline{G} \notag\\
+&+ \left(x^{i_{LR}}_{(i,j,k)}\underline{\overset{\LARGE \frown}{\small{a}}}_{R, (i,j)} + \sum_{u \in [n_c]} x^{j_{u+1}}_{(i,j,k)} \underline{\overset{\LARGE \frown}{\small{c}}}_{u,R, (i,j)} + x^{i_O}_{(i,j,k)}\underline{\overset{\LARGE \frown}{\small{b}}}_{R, (i,j)} + x^{i_S}_{(i,j,k)} \underline{\overset{\LARGE \frown}{\small{s}}}_{R, (i,j)} \right)^\top\underline{H}  \notag\\
+& +\left(x^{i_{LR}}_{(i,j,k)}\overset{\LARGE \frown}{\small{\alpha}}_{(i,j)} + x^{i_O}_{(i,j,k)}\overset{\LARGE \frown}{\small{\beta}}_{(i,j)} + x^{i_S}_{(i,j,k)}\overset{\LARGE \frown}{\small{\rho}}_{(i,j)} + \sum_{u \in [n_c]} x_{(i,j,k)}^{j_{u+1}} \overset{\LARGE \frown}{\small{c}}^\prime_{u,(i,j)}\right)H \notag
+\end{align}
+
+Recall $\widetilde{W}_{O,(i,j)} = (\zq_{(i,j)}^\top W_O - \yq_{(i)}^\top)\underline{H}^\prime_{(i)} = (W_O^\top \zq_{(i,j)} - \yq_{(i)})^\top \underline{H}_{(i)}^\prime = (\yq_{(i)}^{-1} \circ (W_O^\top \zq_{(i,j)} - \yq_{(i)}))^\top \underline{H}$. 
+Similarly, $\widetilde{W}_{L,(i,j)} = \zq_{(i,j)}^\top W_L \underline{H}_{(i)}^\prime = (W_L^\top \zq_{(i,j)})^\top \underline{H}^\prime_{(i)} = (\yq_{(i)}^{-1} \circ (W_L^\top \zq_{(i,j)}))^\top \underline{H}$, 
+ $\widetilde{W}_{R,(i,j)} = (\yq_{(i)}^{-1} \circ (W_R^\top \zq_{(i,j)}))^\top \underline{G}$, and $\widetilde{W}_{u, (i,j)} = (\yq_{(i)}^{-1} \circ W_{u,L}^\top \zq_{(i,j)})^\top\underline{H}$. 
+Recall $P_{(i,j,k)} = \underline{\ell}_{(i,j,k)}^\top \underline{G} + \underline{r}_{(i,j,k)}^\top \underline{H}^\prime_{(i)} + \mu_{(i,j,k)}H$. Except in the case where we've found a nontrivial discrete logarithm relation, we can match terms by basepoint to compare against Equation \ref{eqn:tomato}.
+\begin{align*}
+\underline{\ell}_{(i,j,k)} =& x^{i_{LR}}_{(i,j,k)}\underline{\overset{\LARGE \frown}{\small{a}}}_{L, (i,j)} + \sum_{u \in [n_c]} x^{j_{u+1}}_{(i,j,k)} \underline{\overset{\LARGE \frown}{\small{c}}}_{u,L, (i,j)} + x^{i_O}_{(i,j,k)}\underline{\overset{\LARGE \frown}{\small{b}}}_{L, (i,j)} \\& + x^{i_S}_{(i,j,k)} \underline{\overset{\LARGE \frown}{\small{s}}}_{L, (i,j)} + x_{(i,j,k)}^{i_{LR}}\yq_{(i)}^{-1} \circ (W_R^\top \zq_{(i,j)})\\
+\yq^{-1}_{(i)} \circ \underline{r}_{(i,j,k)} =& x^{i_{LR}}_{(i,j,k)}\underline{\overset{\LARGE \frown}{\small{a}}}_{R, (i,j)} + \sum_{u \in [n_c]} x^{j_{u+1}}_{(i,j,k)} \underline{\overset{\LARGE \frown}{\small{c}}}_{u,R, (i,j)} +  x^{i_O}_{(i,j,k)}\underline{\overset{\LARGE \frown}{\small{b}}}_{R, (i,j)} + x^{i_S}_{(i,j,k)} \underline{\overset{\LARGE \frown}{\small{s}}}_{R, (i,j)} \\
+& + \yq_{(i)}^{-1} \circ (W_O^\top \zq_{(i,j)} - \yq_{(i)}) + \sum_{u \in [n_c]} x_{(i,j,k)}^{i_{u+1}} \left(\yq_{(i)}^{-1} \circ W_{u,L}^\top \zq_{(i,j)}\right)  \\
+& + x^{i_{LR}}_{(i,j,k)} \yq_{(i)}^{-1} \circ (W_L^\top \zq_{(i,j)})   \\
+\mu_{(i,j,k)} =& \overset{\LARGE \frown}{\small{\alpha}}_{(i,j)}x_{(i,j,k)}^{i_{LR}} + \overset{\LARGE \frown}{\small{\beta}}_{(i,j)}x_{(i,j,k)}^{i_O} + \overset{\LARGE \frown}{\small{\rho}}_{(i,j)}x_{(i,j,k)}^{i_S}+\sum_{u \in [n_c]} x_{(i,j,k)}^{j_{u+1}} \overset{\LARGE \frown}{\small{c}}^\prime_{u,(i,j)}
+\end{align*}
+
+
+
+
+Note $\underline{\ell}_{(i,j,k)}^\top \underline{r}_{(i,j,k)}$
+is a degree $2(n^\prime+1)$ polynomial whose $(n^\prime)^{th}$ coefficient is the sum of terms whose monomial exponents sum to $n^\prime$. The indices of the coefficients which do so are exactly 
+$i_O + j_O = i_{LR} + j_{LR} = i_k + j_k = n^\prime$. Moreover, $\underline{\overset{\LARGE \frown}{\small{a}}}_{L,(i,j)}^\top \left(\yq_{(i)} \circ \underline{\overset{\LARGE \frown}{\small{a}}}_{R,(i,j)}\right) = \left(\underline{\overset{\LARGE \frown}{\small{a}}}_{L,(i,j)} \circ \underline{\overset{\LARGE \frown}{\small{a}}}_{R,(i,j)}\right)^\top \yq_{(i)}$, so we have the following. 
+\begin{align*}
+\left(\underline{\ell}_{(i,j,k)}^\top \underline{r}_{(i,j,k)}\right)_{n^\prime} =& \underline{\overset{\LARGE \frown}{\small{a}}}_{O,(i,j)}^\top W^\top_O \zq_{(i,j)} + \sum_{u \in [n_c]} \underline{\overset{\LARGE \frown}{\small{c}}}_{u,L,(i,j)}^\top W^\top_{u,L} \zq_{(i,j)} \\
+& + \left(\underline{\overset{\LARGE \frown}{\small{a}}}_{L,(i,j)} + \yq^{-1}_{(i)} \circ \left(W_R^\top\zq_{(i,j)}\right)\right)^\top\left(\yq_{(i)} \circ \underline{\overset{\LARGE \frown}{\small{a}}}_{R,(i,j)} + W_L^\top\zq_{(i,j)}\right) \\
+=& \underline{\overset{\LARGE \frown}{\small{a}}}_{O,(i,j)}^\top W^\top_O \zq_{(i,j)} + \sum_{u \in [n_c]} \underline{\overset{\LARGE \frown}{\small{c}}}_{u,L,(i,j)}^\top W^\top_{u,L} \zq_{(i,j)} \\
+& + \underline{\overset{\LARGE \frown}{\small{a}}}^\top_{L,(i,j)} (\yq_{(i)} \circ \underline{\overset{\LARGE \frown}{\small{a}}}_{R,(i,j)})  +  \underline{\overset{\LARGE \frown}{\small{a}}}^\top_{L,(i,j)}  W^\top_L \zq_{(i,j)} \\
+& + \left(\yq_{(i)}^{-1} \circ \left(W^\top_R \zq_{(i,j)}\right)\right) \left(\yq_{(i)} \circ  \underline{\overset{\LARGE \frown}{\small{a}}}_{R,(i,j)} \right) \\
+& + \left(\yq^{-1}_{(i)} \circ \left(W_R^\top \zq_{(i,j)} \right)\right)W^\top_L \zq_{(i,j)}\\
+=& \left(\underline{\overset{\LARGE \frown}{\small{a}}}_{L,(i,j)}^\top W_L^\top  + \underline{\overset{\LARGE \frown}{\small{a}}}_{R,(i,j)}^\top W_R^\top  + \underline{\overset{\LARGE \frown}{\small{a}}}_{O,(i,j)}^\top W^\top_O  + \sum_{u \in [n_c]} \underline{\overset{\LARGE \frown}{\small{c}}}^\top_{u,L,(i,j)} W^\top_{u,L}\right)\zq_{(i,j)} \\
+&  + \delta(y_{(i)},z_{(i,j)}) + \left(\underline{\overset{\LARGE \frown}{\small{a}}}_{O,(i,j)} - \underline{\overset{\LARGE \frown}{\small{a}}}_{L,(i,j)} \circ \underline{\overset{\LARGE \frown}{\small{a}}}_{R,(i,j)}\right)^\top \yq_{(i)}
+\end{align*}
+Note the right-hand side is independent of $k$. Recall we saw $\overset{\LARGE \frown}{\small{t}}_{n^\prime,(i,j)} = \delta(y_{(i)},z_{(i,j)}) + \zq_{(i,j)}^\top\left( \underline{c} +  W_V \underline{\overset{\LARGE \frown}{\small{v}}}\right)$ in Equation \ref{eqn:onion} is a correct extraction of this $(n^\prime)^{th}$ coefficient. Set these representations equal and re-arrange terms.
+\begin{align*}
+&  \left(\underline{\overset{\LARGE \frown}{\small{a}}}_{O,(i,j)} - \underline{\overset{\LARGE \frown}{\small{a}}}_{L,(i,j)} \circ \underline{\overset{\LARGE \frown}{\small{a}}}_{R,(i,j)}\right)^\top \yq_{(i)} \\& +  \zq_{(i,j)}^\top\left(W_L\underline{\overset{\LARGE \frown}{\small{a}}}_{L,(i,j)} + W_R\underline{\overset{\LARGE \frown}{\small{a}}}_{R,(i,j)} + W_O\underline{\overset{\LARGE \frown}{\small{a}}}_{O,(i,j)} + \sum_{u \in [n_c]} W_{u,L} \underline{\overset{\LARGE \frown}{\small{c}}}_{u,L,(i,j)} - W_V\underline{\overset{\LARGE \frown}{\small{v}}} - \underline{c}\right) = 0
+\end{align*}
+This holds for each $(i,j)$, and this expression describes a bivariate polynomial in $(y,z)$. By holding $i$ fixed and varying $j$, we can isolate monomials in $z$, and then by varying $i$, we can isolate monomials in $y$. If $N_y \geq n$ and $N_z \geq Q+1$, then unique choices of coefficients $\nu_{-}$ exist to do so, and can be found in polynomial time.
+$$\underline{\overset{\LARGE \frown}{\small{a}}}_{O,(i,j)} - \underline{\overset{\LARGE \frown}{\small{a}}}_{L,(i,j)} \circ \underline{\overset{\LARGE \frown}{\small{a}}}_{R,(i,j)} = \underline{0}$$
+$$W_L\underline{\overset{\LARGE \frown}{\small{a}}}_{L,(i,j)} + W_R\underline{\overset{\LARGE \frown}{\small{a}}}_{R,(i,j)} + W_O\underline{\overset{\LARGE \frown}{\small{a}}}_{O,(i,j)} + \sum_{u \in [n_c]} W_{u,L} \underline{\overset{\LARGE \frown}{\small{c}}}_{u,L,(i,j)} - W_V\underline{\overset{\LARGE \frown}{\small{v}}} - \underline{c} = \underline{0}$$
+thereby satisfying Equations \ref{eqn:ac_sat} and \ref{eqn:linear_constraints}. These hold for each $(i,j)$. The extractions agree across $(i,j)$ except with negligible probability, so we may drop the subscripts  without concern.
+\end{proof}
+
+
+The following corollary follows from ``computational tree extractability $\Rightarrow$ computational witness-extended emulation'' property from \cite{bootle2016efficient}.
+\begin{corollary}
+The interactive protocol in Definition \ref{def:theprotocol} has computational witness-extended emulation.
+\end{corollary}
+
+
+
+
+
+\begin{longtable}{|p{0.28\textwidth}|p{0.2\textwidth}|p{0.37\textwidth}|}
+\caption{Notation legend for variables outside the witness and statement.}
+\label{tab:legend} \\
+\hline
+Symbol & Set / Type & Role \\
+\hline
+\endfirsthead
+
+\multicolumn{3}{c}{\tablename\ \thetable\ -- \textit{continued from previous page}} \\
+\hline
+Symbol & Set / Type & Role \\
+\hline
+\endhead
+
+\hline
+\multicolumn{3}{r}{\textit{continued on next page}} \\
+\endfoot
+
+\hline
+\endlastfoot
+
+\multicolumn{3}{|c|}{\textit{Scheme parameters}} \\
+\hline
+$\FF$ & field & scalars \\
+$\GG$ & curve group & commitments \\
+$O$ & $\GG$ & group identity \\
+$Q$ & $\mathbb{N}$ & number of linear constraints, $Q \geq m$ \\
+$m$ & $\mathbb{N}$ & number of Pedersen scalar commitments \\
+$n$ & $\mathbb{N}$ & number of arithmetic circuit gates \\
+$n_c$ & $\mathbb{N}$ & number of Pedersen vector commitments \\
+$n^\prime$ & $\mathbb{N}$ & equals $2n_c + 2$, governs index range \\
+\hline
+\multicolumn{3}{|c|}{\textit{Public base points}} \\
+\hline
+$G$, $H$ & $\GG$ & scalar commitment generators \\
+$\underline{G}$, $\underline{H}$ & $\GG^n$ & vector commitment generators \\
+$\underline{H}^\prime$ & $\GG^n$ & equals $\yq^{-1} \circ \underline{H}$ \\
+\hline
+\multicolumn{3}{|c|}{\textit{Protocol indices (special)}} \\
+\hline
+$i_{LR} = j_{LR}$ & $\mathbb{N}$ & equals $n^\prime/2$ \\
+$i_O$ & $\mathbb{N}$ & equals $n^\prime$ \\
+$j_O$ & $\mathbb{N}$ & equals $0$ \\
+$i_S = j_S$ & $\mathbb{N}$ & equals $n^\prime + 1$ \\
+$i_k$, $j_k$ $\forall 1 \leq k \leq n_c$ & $\mathbb{N}$ & $i_k = k$, $j_k = n^\prime - k$ \\
+\hline
+\multicolumn{3}{|c|}{\textit{Prover blinders}} \\
+\hline
+$\alpha$, $\beta$, $\rho$ & $\FF$ & blinders for $A_I$, $A_O$, $S$ \\
+$\underline{s}_L$, $\underline{s}_R$ & $\FF^n$ & masking offsets for $S$ \\
+$\tau_i$ & $\FF$ & blinder for $T_i$ \\
+\hline
+\multicolumn{3}{|c|}{\textit{First-message commitments}} \\
+\hline
+$A_I$ & $\GG$ & commits to $\underline{a}_L$, $\underline{a}_R$ \\
+$A_O$ & $\GG$ & commits to $\underline{a}_O$ \\
+$S$ & $\GG$ & commits to $\underline{s}_L$, $\underline{s}_R$ \\
+\hline
+\multicolumn{3}{|c|}{\textit{Verifier challenges}} \\
+\hline
+$y$, $z$ & $\FF^*$ & challenges sent after first message \\
+$x$ & $\FF^*$ & challenge sent after $\underline{T}$ \\
+\hline
+\multicolumn{3}{|c|}{\textit{Challenge-derived vectors}} \\
+\hline
+$\yq$, $\yq^{-1}$ & $\FF^n$ & powers of $y$, $y^{-1}$ \\
+$\zq$ & $\FF^Q$ & shifted powers of $z$ \\
+$\delta(y,z)$ & $\FF$ & cross-term constant \\
+\hline
+\multicolumn{3}{|c|}{\textit{Polynomial-coefficient vectors}} \\
+\hline
+$\underline{\ell}_i$, $\underline{r}_i$ & $\FF^n$ & coefficients of $\underline{\ell}(X)$, $\underline{r}(X)$ \\
+$\underline{\ell}(X)$, $\underline{r}(X)$ & $\FF^n[X]$ & vector polynomials \\
+$\underline{\ell}$, $\underline{r}$ & $\FF^n$ & evaluations at $X = x$ \\
+$t(X)$ & $\FF[X]$ & equals $\underline{\ell}(X)^\top \underline{r}(X)$ \\
+$t_i$ & $\FF$ & coefficients of $t(X)$ \\
+$\widehat{t}$ & $\FF$ & equals $t(X = x) = \underline{\ell}^\top \underline{r}$ \\
+\hline
+\multicolumn{3}{|c|}{\textit{Third-message data}} \\
+\hline
+$T_i$ & $\GG$ & commits to $t_i$ \\
+$\underline{T}$ & $\GG^{3n_c+5}$ & all $T_i$ except $T_{n^\prime}$ \\
+\hline
+\multicolumn{3}{|c|}{\textit{Final-message data}} \\
+\hline
+$\tau_x$ & $\FF$ & blinder aggregator \\
+$\mu$ & $\FF$ & blinder aggregator for $P$ \\
+$\pi$ & $\FF \times \FF \times \FF^n \times \FF^n$ & equals $(\tau_x, \mu, \underline{\ell}, \underline{r})$ \\
+\hline
+\multicolumn{3}{|c|}{\textit{Verifier-computed quantities}} \\
+\hline
+$\widetilde{W}_L$, $\widetilde{W}_O$ & $\GG$ & summaries against $\underline{H}^\prime$ \\
+$\widetilde{W}_R$ & $\GG$ & summary against $\underline{G}$ \\
+$\widetilde{W}_k$ for $k \in [n_c]$ & $\GG$ & per-commitment summaries against $\underline{H}^\prime$ \\
+$P$ & $\GG$ & verification point checked in Eq.~\ref{eqn:verifyP} \\
+\hline
+\multicolumn{3}{|c|}{\textit{Transcript and relation}} \\
+\hline
+$\mathcal{R}$ & relation & circuit-satisfiability relation \\
+$\mathcal{T}$ & tuple & full proof transcript \\
+\hline
+\multicolumn{3}{|c|}{\textit{Extractor objects}} \\
+\hline
+$\mathcal{P}$ & algorithm & interactive prover \\
+$\mathcal{E}$ & algorithm & witness-extended emulator \\
+$\mathcal{F}_x$, $\mathcal{F}_z$, $\mathcal{F}_y$ & algorithms & forking sub-routines \\
+$\xi$ & tape & random tape consumed by $\mathcal{P}$ \\
+$\xi_{\mathcal{P}}$ & tape & random tape sampled by $\mathcal{E}$ for $\mathcal{P}$ \\
+$\xi_{\mathcal{E}}$ & tape & random tape consumed by $\mathcal{E}$ \\
+$N_x$, $N_z$, $N_y$ & $\mathbb{N}$ & transcripts per fork level (inner, intermediate, outer) \\
+$\nu_{u^*,(i,j,k)}$ & $\FF$ & monomial-isolating coefficients \\
+$M_{(i)}$ & $\FF^{m \times m}$ & equals $W_V^\top Z_{(i)} Z_{(i)}^\top W_V$ \\
+$Z_{(i)}$ & $\FF^{Q \times N_z}$ & matrix with columns $\zq_{(i,j)}$, $j \in [N_z]$ \\
+$\underline{\delta}_{(i)}$ & $\FF^{N_z}$ & vector with entries $\delta(y_{(i)}, z_{(i,j)}) + \zq_{(i,j)}^\top \underline{c}$ \\
+$\underline{\overset{\LARGE\frown}{t}}_{n^\prime,(i)}$ & $\FF^{N_z}$ & extracted $G$-coefficients of $T_{n^\prime,(i,j)}$, $j \in [N_z]$ \\
+$\underline{\overset{\LARGE\frown}{\tau}}_{n^\prime,(i)}$ & $\FF^{N_z}$ & extracted $H$-coefficients of $T_{n^\prime,(i,j)}$, $j \in [N_z]$ \\
+$\overset{\LARGE\frown}{\texttt{w}}$ & --- & extracted candidate witness \\
+$W_V$ & $FR(\FF^{Q \times m})$ & full-rank constraint matrix \\
+\hline
+\end{longtable}
+
+
+
+
+\bibliographystyle{plain}
+\bibliography{bibliography}
+
+\end{document}
